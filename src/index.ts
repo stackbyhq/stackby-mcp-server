@@ -7,6 +7,8 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import {
   hasApiKey,
+  getApiBaseUrl,
+  getWorkspaces,
   getAllStacks,
   getTables,
   getTableViewList,
@@ -25,6 +27,51 @@ const mcpServer = new McpServer({
   name: "stackby-mcp-server",
   version: "0.1.0",
 });
+
+mcpServer.registerTool(
+  "list_workspaces",
+  {
+    description: "List Stackby workspaces the user can access. Requires STACKBY_API_KEY (or PAT) in MCP config.",
+    inputSchema: {},
+  },
+  async () => {
+    if (!hasApiKey()) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "STACKBY_API_KEY is not set. Add it to your MCP config (e.g. in Cursor: .cursor/mcp.json → env.STACKBY_API_KEY) with your Stackby API key or Personal Access Token (PAT).",
+          },
+        ],
+      };
+    }
+    try {
+      const workspaces = await getWorkspaces();
+      const lines = workspaces.length === 0
+        ? ["No workspaces found."]
+        : workspaces.map((w) => `- ${w.name} (id: ${w.id})`);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Workspaces (${workspaces.length}):\n${lines.join("\n")}`,
+          },
+        ],
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Failed to list workspaces: ${message}. STACKBY_API_KEY and STACKBY_API_URL in use: ${getApiBaseUrl()}.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  }
+);
 
 mcpServer.registerTool(
   "list_stacks",
@@ -62,7 +109,7 @@ mcpServer.registerTool(
         content: [
           {
             type: "text" as const,
-            text: `Failed to list stacks: ${message}. Check STACKBY_API_KEY and STACKBY_API_URL (default: http://localhost:3000).`,
+            text: `Failed to list stacks: ${message}. STACKBY_API_KEY and STACKBY_API_URL in use: ${getApiBaseUrl()}.`,
           },
         ],
         isError: true,

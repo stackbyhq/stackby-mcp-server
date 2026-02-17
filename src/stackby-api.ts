@@ -1,13 +1,19 @@
 /**
  * Stackby API client for MCP server.
- * Uses STACKBY_API_URL and STACKBY_API_KEY (or PAT). DevAPI routes: workspacelist, stacklist.
+ * Uses dedicated MCP API only: /api/v1/mcp/* (existing developer API is unchanged).
  */
 
-const BASE_URL = process.env.STACKBY_API_URL || "http://localhost:3000";
+const BASE_URL = process.env.STACKBY_API_URL || "https://stackby.com";
 const API_KEY = process.env.STACKBY_API_KEY || "";
+const MCP_API = "/api/v1/mcp";
 
 export function hasApiKey(): boolean {
   return Boolean(API_KEY && API_KEY.trim().length > 0);
+}
+
+/** Returns the base URL actually in use (for error messages). */
+export function getApiBaseUrl(): string {
+  return BASE_URL.replace(/\/$/, "");
 }
 
 function authHeaders(): HeadersInit {
@@ -51,19 +57,27 @@ export interface Stack {
   createdAt?: string;
 }
 
-/** GET /api/v1/workspacelist — list workspaces for the authenticated user (devapi). */
+/** GET /api/v1/mcp/workspaces — list workspaces (MCP API only). */
 export async function getWorkspaces(): Promise<Workspace[]> {
-  const out = await request<Workspace[]>("/api/v1/workspacelist", { method: "GET" });
+  const out = await request<Workspace[]>(`${MCP_API}/workspaces`, { method: "GET" });
   return Array.isArray(out.data) ? out.data : [];
 }
 
-/** GET /api/v1/stacklist/:id — list stacks in a workspace (devapi). id = workspaceId. */
-export async function getStacks(workspaceId: string): Promise<{ list: Stack[]; workspaceName: string }> {
-  const out = await request<{ list: Stack[]; workspaceName: string }>(`/api/v1/stacklist/${workspaceId}`, { method: "GET" });
-  if (out.data && typeof out.data === "object" && Array.isArray((out.data as { list?: Stack[] }).list)) {
-    return out.data as { list: Stack[]; workspaceName: string };
-  }
-  return { list: [], workspaceName: "" };
+/** POST /api/v1/mcp/stacks — list stacks in a workspace. Body: { workspaceId }. */
+export async function getStacks(workspaceId: string, workspaceName?: string): Promise<{ list: Stack[]; workspaceName: string }> {
+  const out = await request<Array<{ stackId?: string; stackName: string; workspaceId: string; color?: string; icon?: string }>>(`${MCP_API}/stacks`, {
+    method: "POST",
+    body: JSON.stringify({ workspaceId }),
+  });
+  const raw = Array.isArray(out.data) ? out.data : [];
+  const list: Stack[] = raw.map((s) => ({
+    stackId: s.stackId ?? "",
+    stackName: s.stackName,
+    workspaceId: s.workspaceId,
+    color: s.color,
+    icon: s.icon,
+  }));
+  return { list, workspaceName: workspaceName ?? "" };
 }
 
 /** Fetch all stacks across all workspaces (for list_stacks tool). */
@@ -72,7 +86,7 @@ export async function getAllStacks(): Promise<Array<Stack & { workspaceName?: st
   const all: Array<Stack & { workspaceName?: string }> = [];
   for (const ws of workspaces) {
     try {
-      const { list, workspaceName } = await getStacks(ws.id);
+      const { list, workspaceName } = await getStacks(ws.id, ws.name);
       for (const s of list) {
         all.push({ ...s, workspaceName });
       }
@@ -88,9 +102,9 @@ export interface Table {
   name: string;
 }
 
-/** GET /api/v1/tablelist/:id — list tables in a stack (devapi). id = stackId. */
+/** GET /api/v1/mcp/stacks/:stackId/tables — list tables in a stack (MCP API only). */
 export async function getTables(stackId: string): Promise<Table[]> {
-  const out = await request<Table[]>(`/api/v1/tablelist/${encodeURIComponent(stackId)}`, { method: "GET" });
+  const out = await request<Table[]>(`${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables`, { method: "GET" });
   return Array.isArray(out.data) ? out.data : [];
 }
 
@@ -108,16 +122,16 @@ export interface TableView {
   tableId: string;
 }
 
-/** GET /api/v1/columnlist/:stackId/:tableId — list columns/fields for a table (devapi). */
+/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/columns — list columns (MCP API only). */
 export async function getTableColumns(stackId: string, tableId: string): Promise<TableField[]> {
-  const path = `/api/v1/columnlist/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}`;
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/columns`;
   const out = await request<TableField[]>(path, { method: "GET" });
   return Array.isArray(out.data) ? out.data : [];
 }
 
-/** GET /api/v1/viewlist/:stackid/:tableid — list views for a table (devapi). */
+/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/views — list all visible views (MCP API only). */
 export async function getTableViewList(stackId: string, tableId: string): Promise<TableView[]> {
-  const path = `/api/v1/viewlist/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}`;
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/views`;
   const out = await request<TableView[]>(path, { method: "GET" });
   return Array.isArray(out.data) ? out.data : [];
 }
@@ -150,7 +164,7 @@ export interface TableRecord {
   field: Record<string, unknown>;
 }
 
-/** GET /api/v1/rowlist/:id/:table — list rows (devapi). Query: maxrecord (default 100, max 100), offset, optional rowIds. */
+/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/rows — list rows (MCP API). */
 export async function getRowList(
   stackId: string,
   tableId: string,
@@ -158,7 +172,7 @@ export async function getRowList(
 ): Promise<TableRecord[]> {
   const maxRecords = Math.min(Math.max(1, opts.maxRecords ?? 100), 100);
   const offset = Math.max(0, opts.offset ?? 0);
-  let path = `/api/v1/rowlist/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}?maxrecord=${maxRecords}&offset=${offset}`;
+  let path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows?maxrecord=${maxRecords}&offset=${offset}`;
   if (opts.rowIds && opts.rowIds.length > 0) {
     path += `&rowIds=${encodeURIComponent(opts.rowIds.join(","))}`;
   }
@@ -166,14 +180,17 @@ export async function getRowList(
   return Array.isArray(out.data) ? out.data : [];
 }
 
-/** Get a single record by id. Uses rowlist with rowIds=recordId. */
+/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/rows/:recordId — get one record (MCP API). */
 export async function getRecord(
   stackId: string,
   tableId: string,
   recordId: string
 ): Promise<TableRecord | null> {
-  const list = await getRowList(stackId, tableId, { rowIds: [recordId], maxRecords: 1 });
-  return list.length > 0 ? list[0] : null;
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows/${encodeURIComponent(recordId)}`;
+  const out = await request<TableRecord | TableRecord[]>(path, { method: "GET" });
+  const data = out.data;
+  if (Array.isArray(data)) return data.length > 0 ? data[0] : null;
+  return data && typeof data === "object" ? (data as TableRecord) : null;
 }
 
 export interface SearchRecordsResult {
@@ -182,7 +199,7 @@ export interface SearchRecordsResult {
   fields: Array<Record<string, unknown>>;
 }
 
-/** POST /api/v2/public/zsearchRow/:stackId/:tableId — search rows in a column (devapi). Body: table, column, search, maxRecord. */
+/** POST /api/v1/mcp/stacks/:stackId/tables/:tableId/search — search rows (MCP API). */
 export async function searchRecords(
   stackId: string,
   tableId: string,
@@ -194,41 +211,31 @@ export async function searchRecords(
     const columns = await getTableColumns(stackId, tableId);
     columnId = columns.length > 0 ? columns[0].id : "";
   }
-  if (!columnId) {
-    return { rowIds: [], rowname: [], fields: [] };
-  }
   const maxRecord = Math.min(Math.max(1, opts.maxRecords ?? 100), 99999);
-  const path = `/api/v2/public/zsearchRow/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}`;
-  const body = {
-    table: tableId,
-    column: columnId,
-    search: searchTerm,
-    maxRecord,
-  };
-  const out = await request<SearchRecordsResult[]>(path, {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/search`;
+  const body = { search: searchTerm, columnId: columnId || undefined, maxRecords: maxRecord };
+  const out = await request<SearchRecordsResult | SearchRecordsResult[]>(path, {
     method: "POST",
     body: JSON.stringify(body),
   });
-  const first = Array.isArray(out.data) && out.data.length > 0 ? out.data[0] : null;
-  if (!first || !first.rowIds) {
+  const data = out.data;
+  const first = Array.isArray(data) ? data[0] : data;
+  if (!first || !(first as SearchRecordsResult).rowIds) {
     return { rowIds: [], rowname: [], fields: [] };
   }
-  return {
-    rowIds: first.rowIds ?? [],
-    rowname: first.rowname ?? [],
-    fields: first.fields ?? [],
-  };
+  const f = first as SearchRecordsResult;
+  return { rowIds: f.rowIds ?? [], rowname: f.rowname ?? [], fields: f.fields ?? [] };
 }
 
 // --- Write APIs (Phase 3) ---
 
-/** POST /api/v1/rowcreate/:id/:table — create one or more rows (devapi). Body: { records: [ { field: { "Column Name": value } } ] }, max 10. */
+/** POST /api/v1/mcp/stacks/:stackId/tables/:tableId/rows — create row(s) (MCP API). */
 export async function createRow(
   stackId: string,
   tableId: string,
   fields: Record<string, unknown>
 ): Promise<TableRecord[]> {
-  const path = `/api/v1/rowcreate/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}`;
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows`;
   const body = { records: [{ field: fields }] };
   const out = await request<TableRecord[]>(path, {
     method: "POST",
@@ -237,7 +244,7 @@ export async function createRow(
   return Array.isArray(out.data) ? out.data : [];
 }
 
-/** POST /api/v1/rowupdate/:id/:table — update rows (devapi). Body: { records: [ { id, field } ] }, max 10. */
+/** POST /api/v1/mcp/stacks/:stackId/tables/:tableId/rows/update — update rows (MCP API). */
 export async function updateRows(
   stackId: string,
   tableId: string,
@@ -245,7 +252,7 @@ export async function updateRows(
 ): Promise<TableRecord[]> {
   if (records.length === 0) return [];
   if (records.length > 10) throw new Error("update_records supports at most 10 records per request.");
-  const path = `/api/v1/rowupdate/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}`;
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows/update`;
   const body = {
     records: records.map((r) => ({ id: r.id, field: r.fields })),
   };
@@ -256,7 +263,7 @@ export async function updateRows(
   return Array.isArray(out.data) ? out.data : [];
 }
 
-/** DELETE /api/v1/rowdelete/:id/:table — soft-delete rows (devapi). Query: rowIds=id1&rowIds=id2. */
+/** DELETE /api/v1/mcp/stacks/:stackId/tables/:tableId/rows — soft-delete rows (MCP API). */
 export async function deleteRows(
   stackId: string,
   tableId: string,
@@ -265,7 +272,7 @@ export async function deleteRows(
   if (recordIds.length === 0) return { records: [] };
   if (recordIds.length > 10) throw new Error("delete_records supports at most 10 records per request.");
   const query = recordIds.map((id) => `rowIds=${encodeURIComponent(id)}`).join("&");
-  const path = `/api/v1/rowdelete/${encodeURIComponent(stackId)}/${encodeURIComponent(tableId)}?${query}`;
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows?${query}`;
   const out = await request<{ records: Array<{ id: string; deleted: boolean }> }>(path, {
     method: "DELETE",
   });
@@ -280,20 +287,14 @@ export interface CreateTableResult {
   [key: string]: unknown;
 }
 
-/** POST /api/v1/tableCreate/:id — create a table in a stack (devapi). :id = stackId. */
+/** POST /api/v1/mcp/stacks/:stackId/tables — create a table in a stack (MCP API). */
 export async function createTable(
   stackId: string,
   name: string,
   _description?: string
 ): Promise<CreateTableResult> {
-  const path = `/api/v1/tableCreate/${encodeURIComponent(stackId)}`;
-  const body = {
-    name: name.trim(),
-    type: "default",
-    data: "",
-    copyTable: "",
-    copyTableData: false,
-  };
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables`;
+  const body = { name: name.trim() };
   const out = await request<CreateTableResult>(path, {
     method: "POST",
     body: JSON.stringify(body),
@@ -342,7 +343,7 @@ export interface CreateColumnResult {
   [key: string]: unknown;
 }
 
-/** POST /api/v1/columnCreate/:columnType — create a column (devapi). Body: stackId, tableId, name, viewId; for singleOption/multipleOptions add options[]. */
+/** POST /api/v1/mcp/columns — create a column (MCP API). Body: stackId, tableId, name, columnType, viewId?, options? */
 export async function createColumn(
   stackId: string,
   tableId: string,
@@ -350,11 +351,12 @@ export async function createColumn(
   columnType: string,
   opts: { viewId?: string; options?: string[] } = {}
 ): Promise<CreateColumnResult> {
-  const path = `/api/v1/columnCreate/${encodeURIComponent(columnType)}`;
+  const path = `${MCP_API}/columns`;
   const body: Record<string, unknown> = {
     stackId,
     tableId,
     name: name.trim(),
+    columnType,
     viewId: opts.viewId ?? "",
   };
   if (opts.options && opts.options.length > 0) {

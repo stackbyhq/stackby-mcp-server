@@ -96,7 +96,6 @@ Or one-click: `npx stackby-mcp-server` (after npm publish)
 | Env | Required | Description |
 |-----|----------|-------------|
 | `STACKBY_API_KEY` | Yes | Stackby API key (or PAT when implemented). |
-| `STACKBY_API_URL` | No | Base URL of Stackby API (default: `http://localhost:3000` for local dev). |
 
 **Full config** (Cursor, Claude Desktop, Cline, HTTP transport): see `Stackby_API/MCP_SERVER/docs/CONFIG.md` in the sibling repo.
 
