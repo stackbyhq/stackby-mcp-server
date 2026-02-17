@@ -18,7 +18,6 @@ Model Context Protocol (MCP) server for Stackby. Exposes tools so AI clients (Cu
       "args": ["-y", "stackby-mcp-server"],
       "env": {
         "STACKBY_API_KEY": "your-api-key-or-pat",
-        "STACKBY_API_URL": "http://localhost:3000"
       }
     }
   }
