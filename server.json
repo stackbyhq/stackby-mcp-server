@@ -5,15 +5,15 @@
   "description": "Read and write access to Stackby workspaces, stacks, tables, and records. Use with Cursor, Claude Desktop, Cline, and other MCP clients.",
   "websiteUrl": "https://stackby.com",
   "repository": {
-    "url": "https://github.com/stackbyhq/stackby-mcp-server.git",
+    "url": "https://github.com/stackby/stackby-mcp-server.git",
     "source": "github"
   },
-  "version": "0.2.2",
+  "version": "{{VERSION}}",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "stackby-mcp-server",
-      "version": "0.2.2",
+      "version": "{{VERSION}}",
       "runtimeHint": "npx",
       "environmentVariables": [
         {
@@ -35,7 +35,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/stackby/stackby-mcp-server:0.2.2",
+      "identifier": "docker.io/stackby/stackby-mcp-server:{{VERSION}}",
       "environmentVariables": [
         {
           "name": "STACKBY_API_KEY",
