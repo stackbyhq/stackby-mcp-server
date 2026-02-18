@@ -8,12 +8,12 @@
     "url": "https://github.com/stackbyhq/stackby-mcp-server.git",
     "source": "github"
   },
-  "version": "{{VERSION}}",
+  "version": "0.2.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "stackby-mcp-server",
-      "version": "{{VERSION}}",
+      "version": "0.2.2",
       "runtimeHint": "npx",
       "environmentVariables": [
         {
@@ -35,7 +35,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/stackby/stackby-mcp-server:{{VERSION}}",
+      "identifier": "docker.io/stackby/stackby-mcp-server:0.2.2",
       "environmentVariables": [
         {
           "name": "STACKBY_API_KEY",
