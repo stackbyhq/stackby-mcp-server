@@ -1,6 +1,6 @@
 {
   "name": "stackby-mcp-server",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "MCP server for Stackby — list stacks, tables, records; create/update/delete rows and schema via AI clients (Cursor, Claude, Cline).",
   "main": "dist/index.js",
   "bin": { "stackby-mcp-server": "dist/index.js" },
