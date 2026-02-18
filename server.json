@@ -5,7 +5,7 @@
   "description": "Read and write access to Stackby workspaces, stacks, tables, and records. Use with Cursor, Claude Desktop, Cline, and other MCP clients.",
   "websiteUrl": "https://stackby.com",
   "repository": {
-    "url": "https://github.com/stackby/stackby-mcp-server.git",
+    "url": "https://github.com/stackbyhq/stackby-mcp-server.git",
     "source": "github"
   },
   "version": "{{VERSION}}",
