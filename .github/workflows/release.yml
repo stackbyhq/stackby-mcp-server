@@ -1,5 +1,7 @@
 # Option C: On push of tag v*, patch server.json, publish npm, build/push Docker, create GitHub Release.
-# Required secrets: NPM_TOKEN (npm publish). Optional: DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (Docker push).
+# Required secrets: NPM_TOKEN (npm publish).
+# Optional Docker: set repo variable PUBLISH_DOCKER = true, and secrets DOCKERHUB_USERNAME, DOCKERHUB_TOKEN.
+# (Secrets cannot be used in 'if' conditions; use the variable to gate Docker steps.)
 
 name: Release
 
@@ -46,18 +48,18 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Set up Docker Buildx
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: vars.PUBLISH_DOCKER == 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: vars.PUBLISH_DOCKER == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push Docker image
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+        if: vars.PUBLISH_DOCKER == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
