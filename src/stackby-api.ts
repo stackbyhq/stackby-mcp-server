@@ -28,6 +28,17 @@ function authHeaders(): HeadersInit {
   };
 }
 
+/**
+ * Backend sendResponseAuthentication.js sends MCP routes as "plain": the raw payload
+ * (body.data) is sent, not { data: body.data }. So we accept both shapes.
+ */
+function normalizeResponse<T>(body: unknown): { data: T } {
+  if (body != null && typeof body === "object" && "data" in body && (body as { data?: unknown }).data !== undefined) {
+    return { data: (body as { data: T }).data };
+  }
+  return { data: body as T };
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<{ data: T }> {
   const url = path.startsWith("http") ? path : `${BASE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
@@ -39,7 +50,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<{ da
     const msg = body?.error ?? body?.message ?? res.statusText;
     throw new Error(`Stackby API ${res.status}: ${msg}`);
   }
-  return body as { data: T };
+  return normalizeResponse<T>(body);
 }
 
 export interface Workspace {
@@ -143,19 +154,16 @@ export interface DescribeTableResult {
   views: TableView[];
 }
 
-/** Describe one table: name (from tablelist), fields (columnlist), views (viewlist). */
+/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId — describe table (single API: id, name, fields, views). */
 export async function describeTable(stackId: string, tableId: string): Promise<DescribeTableResult> {
-  const [tables, fields, views] = await Promise.all([
-    getTables(stackId),
-    getTableColumns(stackId, tableId),
-    getTableViewList(stackId, tableId),
-  ]);
-  const tableMeta = tables.find((t) => t.id === tableId);
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}`;
+  const out = await request<DescribeTableResult>(path, { method: "GET" });
+  const d = out.data;
   return {
-    id: tableId,
-    name: tableMeta?.name ?? tableId,
-    fields,
-    views,
+    id: d?.id ?? tableId,
+    name: d?.name ?? tableId,
+    fields: Array.isArray(d?.fields) ? d.fields : [],
+    views: Array.isArray(d?.views) ? d.views : [],
   };
 }
 
