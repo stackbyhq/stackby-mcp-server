@@ -1,25 +1,39 @@
 /**
  * Stackby API client for MCP server.
  * Uses dedicated MCP API only: /api/v1/mcp/* (existing developer API is unchanged).
+ * In HTTP (hosted) mode, API key and URL come from request context; in stdio mode from process.env.
  */
+import { getApiKeyFromContext, getApiUrlFromContext } from "./request-context.js";
 
-const BASE_URL = process.env.STACKBY_API_URL || "https://stackby.com";
-const API_KEY = process.env.STACKBY_API_KEY || "";
+const DEFAULT_BASE_URL = process.env.STACKBY_API_URL || "https://stackby.com";
+const ENV_API_KEY = process.env.STACKBY_API_KEY || "";
 const MCP_API = "/api/v1/mcp";
 
+function getEffectiveApiKey(): string {
+  const fromContext = getApiKeyFromContext();
+  if (fromContext) return fromContext;
+  return ENV_API_KEY.trim();
+}
+
+function getEffectiveBaseUrl(): string {
+  const fromContext = getApiUrlFromContext();
+  if (fromContext) return fromContext.replace(/\/$/, "");
+  return DEFAULT_BASE_URL.replace(/\/$/, "");
+}
+
 export function hasApiKey(): boolean {
-  return Boolean(API_KEY && API_KEY.trim().length > 0);
+  return Boolean(getEffectiveApiKey());
 }
 
 /** Returns the base URL actually in use (for error messages). */
 export function getApiBaseUrl(): string {
-  return BASE_URL.replace(/\/$/, "");
+  return getEffectiveBaseUrl();
 }
 
 function authHeaders(): HeadersInit {
-  const key = API_KEY.trim();
+  const key = getEffectiveApiKey();
   if (!key) {
-    throw new Error("STACKBY_API_KEY is not set. Set it in your MCP config (e.g. Cursor mcp.json env).");
+    throw new Error("STACKBY_API_KEY is not set. Set it in your MCP config (e.g. Cursor mcp.json env) or send header X-Stackby-API-Key (hosted).");
   }
   return {
     "Content-Type": "application/json",
@@ -40,7 +54,8 @@ function normalizeResponse<T>(body: unknown): { data: T } {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<{ data: T }> {
-  const url = path.startsWith("http") ? path : `${BASE_URL.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const base = getEffectiveBaseUrl();
+  const url = path.startsWith("http") ? path : `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
     ...options,
     headers: { ...authHeaders(), ...(options.headers as Record<string, string>) },

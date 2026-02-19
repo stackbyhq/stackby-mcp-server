@@ -1,58 +1,67 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
-  "name": "io.stackby/stackby-mcp-server",
-  "title": "Stackby",
-  "description": "Read and write access to Stackby workspaces, stacks, tables, and records. Use with Cursor, Claude Desktop, Cline, and other MCP clients.",
-  "websiteUrl": "https://stackby.com",
-  "repository": {
-    "url": "https://github.com/stackby/stackby-mcp-server.git",
-    "source": "github"
-  },
-  "version": "{{VERSION}}",
-  "packages": [
-    {
-      "registryType": "npm",
-      "identifier": "stackby-mcp-server",
-      "version": "{{VERSION}}",
-      "runtimeHint": "npx",
-      "environmentVariables": [
+    "$schema": "https://static.modelcontextprotocol.io/schemas/2025-10-17/server.schema.json",
+    "name": "io.stackby/stackby-mcp-server",
+    "title": "Stackby",
+    "description": "Read and write access to Stackby workspaces, stacks, tables, and records. Use with Cursor, Claude Desktop, Cline, and other MCP clients.",
+    "websiteUrl": "https://stackby.com",
+    "icons": [
         {
-          "name": "STACKBY_API_KEY",
-          "description": "Stackby API key or Personal Access Token. Create in Stackby under Settings → Developer / API.",
-          "isRequired": true,
-          "isSecret": true
-        },
-        {
-          "name": "STACKBY_API_URL",
-          "description": "Stackby API base URL (e.g. https://stackby.com). Omit to use default.",
-          "isRequired": false,
-          "isSecret": false
+            "src": "https://stackbybucketprod.s3.ap-southeast-1.amazonaws.com/AI-Logo-Stackby.png",
+            "mimeType": "image/png",
+            "sizes": [
+                "any"
+            ]
         }
-      ],
-      "transport": {
-        "type": "stdio"
-      }
+    ],
+    "repository": {
+        "url": "https://github.com/stackby/stackby-mcp-server.git",
+        "source": "github"
     },
-    {
-      "registryType": "oci",
-      "identifier": "docker.io/stackby/stackby-mcp-server:{{VERSION}}",
-      "environmentVariables": [
+    "version": "{{VERSION}}",
+    "packages": [
         {
-          "name": "STACKBY_API_KEY",
-          "description": "Stackby API key or Personal Access Token.",
-          "isRequired": true,
-          "isSecret": true
+            "registryType": "npm",
+            "identifier": "stackby-mcp-server",
+            "version": "{{VERSION}}",
+            "runtimeHint": "npx",
+            "environmentVariables": [
+                {
+                    "name": "STACKBY_API_KEY",
+                    "description": "Stackby API key or Personal Access Token. Create in Stackby under Settings → Developer / API.",
+                    "isRequired": true,
+                    "isSecret": true
+                },
+                {
+                    "name": "STACKBY_API_URL",
+                    "description": "Stackby API base URL (e.g. https://stackby.com). Omit to use default.",
+                    "isRequired": false,
+                    "isSecret": false
+                }
+            ],
+            "transport": {
+                "type": "stdio"
+            }
         },
         {
-          "name": "STACKBY_API_URL",
-          "description": "Stackby API base URL. Omit to use default.",
-          "isRequired": false,
-          "isSecret": false
+            "registryType": "oci",
+            "identifier": "docker.io/stackby/stackby-mcp-server:{{VERSION}}",
+            "environmentVariables": [
+                {
+                    "name": "STACKBY_API_KEY",
+                    "description": "Stackby API key or Personal Access Token.",
+                    "isRequired": true,
+                    "isSecret": true
+                },
+                {
+                    "name": "STACKBY_API_URL",
+                    "description": "Stackby API base URL. Omit to use default.",
+                    "isRequired": false,
+                    "isSecret": false
+                }
+            ],
+            "transport": {
+                "type": "stdio"
+            }
         }
-      ],
-      "transport": {
-        "type": "stdio"
-      }
-    }
-  ]
+    ]
 }
