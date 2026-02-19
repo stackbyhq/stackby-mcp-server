@@ -3,17 +3,34 @@
   "version": "0.2.8",
   "description": "MCP server for Stackby — list stacks, tables, records; create/update/delete rows and schema via AI clients (Cursor, Claude, Cline).",
   "main": "dist/index.js",
-  "bin": { "stackby-mcp-server": "dist/index.js" },
-  "files": ["dist"],
+  "bin": {
+    "stackby-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc && node -e \"console.log('\\nBuild OK. Output in dist/'); console.log('Run npm start to run the server.');\"",
     "start": "node dist/index.js",
     "dev": "tsc && node dist/index.js",
     "prepare": "npm run build"
   },
-  "engines": { "node": ">=18" },
-  "keywords": ["mcp", "stackby", "model-context-protocol", "cursor", "claude", "ai"],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "stackby",
+    "model-context-protocol",
+    "cursor",
+    "claude",
+    "ai"
+  ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stackbyhq/stackby-mcp-server"
+  },
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
