@@ -45,6 +45,23 @@ function getApiUrlFromRequest(req: http.IncomingMessage): string | undefined {
   return typeof header === "string" && header.trim() ? header.trim() : undefined;
 }
 
+/** Serialize any thrown value into a JSON-safe object so the client sees the real error. */
+function serializeError(err: unknown): Record<string, unknown> {
+  if (err instanceof Error) {
+    return {
+      error: "MCP handler error",
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      ...("code" in err && typeof (err as { code: unknown }).code === "string" && { code: (err as { code: string }).code }),
+    };
+  }
+  return {
+    error: "MCP handler error",
+    message: String(err),
+  };
+}
+
 async function main(): Promise<void> {
   // Log unhandled rejections (e.g. from SDK after response started) so hosted logs show the real error
   process.on("unhandledRejection", (reason, promise) => {
@@ -84,11 +101,13 @@ async function main(): Promise<void> {
         }
         await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("[MCP /mcp] Error handling request:", err);
+        const payload = serializeError(err);
+        const message = (payload.message as string) ?? String(err);
+        console.error("[MCP /mcp] Error handling request:", message);
+        if (payload.stack) console.error(payload.stack);
         if (!res.headersSent) {
           res.writeHead(500, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: "MCP handler error", message }));
+          res.end(JSON.stringify(payload));
         }
       }
       return;
