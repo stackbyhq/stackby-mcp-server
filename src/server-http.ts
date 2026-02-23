@@ -18,20 +18,6 @@ function normalizePath(raw: string): string {
   return p.endsWith("/") && p.length > 1 ? p.slice(0, -1) : p;
 }
 
-async function readBody(req: http.IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-  }
-  const raw = Buffer.concat(chunks).toString("utf8");
-  if (!raw.trim()) return undefined;
-  try {
-    return JSON.parse(raw) as unknown;
-  } catch {
-    return undefined;
-  }
-}
-
 function getApiKeyFromRequest(req: http.IncomingMessage): string | undefined {
   const header = req.headers["x-stackby-api-key"];
   if (typeof header === "string" && header.trim()) return header.trim();
@@ -43,16 +29,6 @@ function getApiKeyFromRequest(req: http.IncomingMessage): string | undefined {
 function getApiUrlFromRequest(req: http.IncomingMessage): string | undefined {
   const header = req.headers["x-stackby-api-url"];
   return typeof header === "string" && header.trim() ? header.trim() : undefined;
-}
-
-/** True if body is a single JSON-RPC notification (no id) or batch of same — server should respond 202 with empty body. */
-function isNotificationOnly(body: unknown): boolean {
-  if (body == null || typeof body !== "object") return false;
-  const obj = body as Record<string, unknown>;
-  if (Array.isArray(obj)) {
-    return obj.length === 0 || obj.every((m) => isNotificationOnly(m));
-  }
-  return "jsonrpc" in obj && "method" in obj && !("id" in obj && obj.id !== undefined && obj.id !== null);
 }
 
 /** Serialize any thrown value into a JSON-safe object so the client sees the real error. */
@@ -94,11 +70,6 @@ async function main(): Promise<void> {
       return;
     }
 
-    console.log("path", path);
-    console.log("req.method", req.method);
-    console.log("req.headers", req.headers);
-    console.log("req.url", req.url);
-    console.log("req.body", await readBody(req));
     if (path === MCP_PATH && (req.method === "POST" || req.method === "GET")) {
       const apiKey = getApiKeyFromRequest(req);
       const apiUrl = getApiUrlFromRequest(req);
@@ -107,20 +78,10 @@ async function main(): Promise<void> {
         res.end(JSON.stringify({ error: "Missing API key. Send X-Stackby-API-Key or Authorization: Bearer <key>." }));
         return;
       }
-      let parsedBody: unknown;
       try {
-        if (req.method === "POST") {
-          parsedBody = await readBody(req);
-        } else {
-          parsedBody = undefined;
-        }
-        // Notification-only POST (e.g. notifications/initialized): respond 202 empty per MCP streamable HTTP spec
-        if (req.method === "POST" && isNotificationOnly(parsedBody)) {
-          res.writeHead(202, { "Content-Type": "application/json" });
-          res.end("");
-          return;
-        }
-        await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
+        // Do not read req body here — the SDK (via Hono) reads it when converting Node req to Web Request.
+        // If we read the stream first, the SDK gets an empty body and returns "Parse error: Invalid JSON".
+        await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res));
       } catch (err) {
         const payload = serializeError(err);
         const message = (payload.message as string) ?? String(err);
