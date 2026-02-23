@@ -31,6 +31,22 @@ function getApiUrlFromRequest(req: http.IncomingMessage): string | undefined {
   return typeof header === "string" && header.trim() ? header.trim() : undefined;
 }
 
+/** Read and parse POST body once. SDK uses parsedBody when provided and does not read from req. */
+async function readBody(req: http.IncomingMessage): Promise<{ body: unknown; rawLength: number }> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+  }
+  const raw = Buffer.concat(chunks).toString("utf8");
+  const rawLength = raw.length;
+  if (!raw.trim()) return { body: undefined, rawLength };
+  try {
+    return { body: JSON.parse(raw) as unknown, rawLength };
+  } catch {
+    return { body: undefined, rawLength };
+  }
+}
+
 /** Serialize any thrown value into a JSON-safe object so the client sees the real error. */
 function serializeError(err: unknown): Record<string, unknown> {
   if (err instanceof Error) {
@@ -75,13 +91,40 @@ async function main(): Promise<void> {
         return;
       }
       try {
+        let parsedBody: unknown;
+        if (req.method === "POST") {
+          const { body, rawLength } = await readBody(req);
+          parsedBody = body;
+          // ✅ ADD THIS
+          console.log("[MCP] rawLength:", rawLength);
+          console.log("[MCP] parsedBody:", JSON.stringify(parsedBody));
+          console.log("[MCP] headers:", JSON.stringify(req.headers));
+          // POST body was empty or invalid JSON; stream is consumed so SDK must not read req. Return 400 ourselves.
+          if (parsedBody === undefined) {
+            console.error("[MCP /mcp] POST body empty or invalid JSON, raw length:", rawLength);
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                error: {
+                  code: -32700,
+                  message: rawLength === 0 ? "Parse error: Request body is empty" : "Parse error: Invalid JSON",
+                },
+                id: null,
+              })
+            );
+            return;
+          }
+        } else {
+          parsedBody = undefined;
+        }
         // Stateless transport can only handle one request; SDK throws on reuse. Create a fresh transport per request.
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
         await mcpServer.connect(transport);
-        // Do not read req body here — the SDK (via Hono) reads it when converting Node req to Web Request.
-        await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res));
+        // Pass parsedBody explicitly so the SDK uses it and does not read from req (stream already consumed).
+        await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
       } catch (err) {
         const payload = serializeError(err);
         const message = (payload.message as string) ?? String(err);
@@ -89,7 +132,10 @@ async function main(): Promise<void> {
         if (payload.stack) console.error(payload.stack);
         const errorHeader = encodeURIComponent(message.slice(0, 200));
         if (!res.headersSent) {
-          res.writeHead(500, { "Content-Type": "application/json", "X-MCP-Error": errorHeader });
+          res.writeHead(500, {
+            "Content-Type": "application/json; charset=utf-8",
+            "X-MCP-Error": errorHeader,
+          });
           res.end(JSON.stringify(payload));
         } else {
           try {

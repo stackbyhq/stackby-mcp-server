@@ -96,6 +96,20 @@ npm run build
 
 **How to verify the build:** After `npm run build` you should see `Build OK. Output in dist/`. Run `npm start` — the server runs over stdio (no visible output; it waits for Cursor/Claude to connect).
 
+### Run HTTP server with PM2 (production)
+
+On the server, build then start the HTTP MCP backend with PM2:
+
+```bash
+npm run build
+npm run pm2:start
+```
+
+This runs `pm2 start dist/server-http.js --name mcp-backend`. Ensure **PM2** is installed (`npm install -g pm2`). The server listens on port **3001** by default (set `PORT` in the environment if needed).
+
+- Restart after code changes: `npm run build && npm run pm2:restart`
+- Stop: `npm run pm2:stop`
+
 ## Verify in Cursor (Step 1.2)
 
 1. Open Cursor **Settings** → **MCP** (or edit the config file directly).
@@ -160,20 +174,19 @@ Or one-click: `npx stackby-mcp-server` (after npm publish)
    Replace the path if your repo is elsewhere. Do not use `npx -y stackby-mcp-server` for local development unless you have published/installed that package.
 3. **API key** — Ensure `STACKBY_API_KEY` (or PAT) is set in the server’s `env` in `mcp.json`. Restart Cursor after editing the config.
 
+**Local stdio works but hosted URL returns 500 with no error body**
+
+- The **stdio** config (e.g. `command` / `args` to `dist/index.js` with `env.STACKBY_API_KEY`) works because the key is in the process env. The **hosted URL** (`https://mcp.stackby.com/mcp`) must receive the API key on **every request** via headers: `X-Stackby-API-Key` or `Authorization: Bearer <key>`.
+- To get **proper error responses** from the hosted endpoint (so you see what failed instead of only status 500):
+  1. **Deploy the latest code** from this repo (including `server-http.ts`). The server returns a JSON body on 500 with `error`, `name`, `message`, and optionally `stack` and `code`, plus an `X-MCP-Error` response header with a short message.
+  2. After deploy, on 500 the **response body** will be JSON, e.g. `{ "error": "MCP handler error", "name": "Error", "message": "..." }`. Check that body (or the `X-MCP-Error` header) in Postman / dev tools to see the real error.
+  3. On the server, check logs for `[MCP /mcp] Error handling request:` and the stack trace to debug.
+
 **Streamable HTTP "Error POSTing to endpoint" or SSE "Non-200 status code (500)"**
 
 - **Check API key** — The server returns 401 without a key and can return 500 for other errors. In `mcp.json` under your streamableHttp config, set **headers** so every request includes your key, e.g. `"X-Stackby-API-Key": "your-api-key-or-pat"` or `"Authorization": "Bearer your-api-key-or-pat"`. Restart Cursor after editing.
-- **If you're testing locally** (`url": "http://localhost:3001/mcp"`): run `npm run start:http` in a terminal and watch the log when Cursor connects. You’ll see `[MCP /mcp] Error handling request:` plus the real error (e.g. SDK or protocol issue). Fix that cause and restart the server.
-- **If you're using the hosted URL** (`https://mcp.stackby.com/mcp`): 500 means the hosted server threw an error. Confirm headers are set as above; if they are, the host needs to fix the server or you can run the server locally and use `http://localhost:3001/mcp` to debug.
-
-**"Error connecting to SSE server" or "Non-200 status code (500)" when using the hosted URL (https://mcp.stackby.com)**
-
-- The hosted server **requires your API key on every request**. In Cursor you must add **headers** so the key is sent.
-- Use **streamableHttp** with `url`: `https://mcp.stackby.com/mcp` and a **headers** object, for example:
-  - `"X-Stackby-API-Key": "your-api-key-or-pat"`
-  - or `"Authorization": "Bearer your-api-key-or-pat"`
-- If no API key is sent, the server returns 401; Cursor can surface that as a connection or 500-style error. Add the header and restart Cursor.
-- **If you still get 500 with the correct headers**, the error is on the server. Whoever runs **mcp.stackby.com** should: (1) Check server logs for `[MCP /mcp] Error handling request` or `[MCP] Unhandled rejection` to see the real error. (2) Deploy the latest `server-http` code from this repo so 500 responses include a JSON body `{ "error": "MCP handler error", "message": "..." }` and errors are logged.
+- **If you're testing locally** (`url": "http://localhost:3001/mcp"`): run `npm run start:http` in a terminal and watch the log when Cursor connects. You’ll see `[MCP /mcp] Error handling request:` plus the real error. Fix that cause and restart the server.
+- **If you're using the hosted URL** (`https://mcp.stackby.com/mcp`): 500 means the hosted server threw an error. Confirm headers are set as above. Ensure the hosted server runs the **latest** `server-http` from this repo so 500 responses include the full error JSON and `X-MCP-Error` header.
 
 **Same errors when adding as a local server**
 

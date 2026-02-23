@@ -13,6 +13,9 @@
     "build": "tsc && node -e \"console.log('\\nBuild OK. Output in dist/'); console.log('Run npm start to run the server.');\"",
     "start": "node dist/index.js",
     "start:http": "node dist/server-http.js",
+    "pm2:start": "pm2 start dist/server-http.js --name mcp-backend",
+    "pm2:restart": "pm2 restart mcp-backend",
+    "pm2:stop": "pm2 stop mcp-backend",
     "dev": "tsc && node dist/index.js",
     "prepare": "npm run build"
   },
