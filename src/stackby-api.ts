@@ -194,6 +194,7 @@ export interface GetRowListOptions {
   rowIds?: string[];
   pageSize?: number;
   view?: string;
+  viewId?: string;
   filter?: string;
   sort?: string;
   latest?: string;
@@ -216,6 +217,7 @@ export async function getRowList(
     params.set("rowIds", opts.rowIds.join(","));
   }
   if (opts.view != null && opts.view !== "") params.set("view", opts.view);
+  if (opts.viewId != null && opts.viewId !== "") params.set("view", opts.viewId);
   if (opts.filter != null && opts.filter !== "") params.set("filter", opts.filter);
   if (opts.sort != null && opts.sort !== "") params.set("sort", opts.sort);
   if (opts.latest != null && opts.latest !== "") params.set("latest", opts.latest);
