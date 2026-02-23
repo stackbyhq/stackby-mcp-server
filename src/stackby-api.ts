@@ -187,18 +187,41 @@ export interface TableRecord {
   field: Record<string, unknown>;
 }
 
-/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/rows — list rows (MCP API). */
+/** Options for list rows — aligned with rowList.js query params. */
+export interface GetRowListOptions {
+  maxRecords?: number;
+  offset?: number;
+  rowIds?: string[];
+  pageSize?: number;
+  view?: string;
+  filter?: string;
+  sort?: string;
+  latest?: string;
+  filterByFormula?: string;
+  conjuction?: string;
+}
+
+/** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/rows — list rows (MCP API). Passes all opts as query params. */
 export async function getRowList(
   stackId: string,
   tableId: string,
-  opts: { maxRecords?: number; offset?: number; rowIds?: string[] } = {}
+  opts: GetRowListOptions = {}
 ): Promise<TableRecord[]> {
-  const maxRecords = Math.min(Math.max(1, opts.maxRecords ?? 100), 100);
+  const maxRecords = Math.min(Math.max(1, opts.maxRecords ?? opts.pageSize ?? 100), 100);
   const offset = Math.max(0, opts.offset ?? 0);
-  let path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows?maxrecord=${maxRecords}&offset=${offset}`;
+  const params = new URLSearchParams();
+  params.set("maxrecord", String(maxRecords));
+  params.set("offset", String(offset));
   if (opts.rowIds && opts.rowIds.length > 0) {
-    path += `&rowIds=${encodeURIComponent(opts.rowIds.join(","))}`;
+    params.set("rowIds", opts.rowIds.join(","));
   }
+  if (opts.view != null && opts.view !== "") params.set("view", opts.view);
+  if (opts.filter != null && opts.filter !== "") params.set("filter", opts.filter);
+  if (opts.sort != null && opts.sort !== "") params.set("sort", opts.sort);
+  if (opts.latest != null && opts.latest !== "") params.set("latest", opts.latest);
+  if (opts.filterByFormula != null && opts.filterByFormula !== "") params.set("filterByFormula", opts.filterByFormula);
+  if (opts.conjuction != null && opts.conjuction !== "") params.set("conjuction", opts.conjuction);
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows?${params.toString()}`;
   const out = await request<TableRecord[]>(path, { method: "GET" });
   return Array.isArray(out.data) ? out.data : [];
 }

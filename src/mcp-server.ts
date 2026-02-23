@@ -229,9 +229,18 @@ export function createStackbyMcpServer(): McpServer {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
         tableId: z.string().describe("Table ID (from list_tables)"),
         maxRecords: z.number().optional().describe("Max records to return (1–100, default 100)"),
+        offset: z.number().optional().describe("Number of records to skip (pagination)"),
+        rowIds: z.array(z.string()).optional().describe("Return only these row IDs"),
+        pageSize: z.number().optional().describe("Same as maxRecords (1–100)"),
+        view: z.string().optional().describe("View ID to use for row order/filter"),
+        filter: z.string().optional().describe("Filter expression (JSON)"),
+        sort: z.string().optional().describe("Sort expression (JSON)"),
+        latest: z.string().optional().describe("Return latest rows (e.g. by updated time)"),
+        filterByFormula: z.string().optional().describe("Formula-based filter"),
+        conjuction: z.string().optional().describe("Filter conjunction: 'and' or 'or' (default and)"),
       },
     },
-    async ({ stackId, tableId, maxRecords }) => {
+    async ({ stackId, tableId, maxRecords, offset, rowIds, pageSize, view, filter, sort, latest, filterByFormula, conjuction }) => {
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       if (!sId || !tId) {
@@ -246,7 +255,18 @@ export function createStackbyMcpServer(): McpServer {
         };
       }
       try {
-        const records = await getRowList(sId, tId, { maxRecords: maxRecords ?? 100 });
+        const records = await getRowList(sId, tId, {
+          maxRecords: maxRecords ?? 100,
+          offset,
+          rowIds,
+          pageSize,
+          view,
+          filter,
+          sort,
+          latest,
+          filterByFormula,
+          conjuction,
+        });
         const lines =
           records.length === 0
             ? ["No records found."]
