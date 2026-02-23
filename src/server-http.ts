@@ -70,8 +70,6 @@ async function main(): Promise<void> {
     console.error("[MCP] Unhandled rejection:", reason);
   });
 
-  const mcpServer = createStackbyMcpServer();
-
   const server = http.createServer(async (req, res) => {
     const url = req.url ?? "";
     const path = normalizePath(url);
@@ -95,10 +93,6 @@ async function main(): Promise<void> {
         if (req.method === "POST") {
           const { body, rawLength } = await readBody(req);
           parsedBody = body;
-          // ✅ ADD THIS
-          console.log("[MCP] rawLength:", rawLength);
-          console.log("[MCP] parsedBody:", JSON.stringify(parsedBody));
-          console.log("[MCP] headers:", JSON.stringify(req.headers));
           // POST body was empty or invalid JSON; stream is consumed so SDK must not read req. Return 400 ourselves.
           if (parsedBody === undefined) {
             console.error("[MCP /mcp] POST body empty or invalid JSON, raw length:", rawLength);
@@ -118,7 +112,8 @@ async function main(): Promise<void> {
         } else {
           parsedBody = undefined;
         }
-        // Stateless transport can only handle one request; SDK throws on reuse. Create a fresh transport per request.
+        // Stateless: use a fresh server + transport per request so we never hit "Already connected to a transport".
+        const mcpServer = createStackbyMcpServer();
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: undefined,
         });
