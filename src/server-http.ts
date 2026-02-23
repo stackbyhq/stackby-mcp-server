@@ -55,10 +55,6 @@ async function main(): Promise<void> {
   });
 
   const mcpServer = createStackbyMcpServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless for hosted
-  });
-  await mcpServer.connect(transport);
 
   const server = http.createServer(async (req, res) => {
     const url = req.url ?? "";
@@ -79,8 +75,12 @@ async function main(): Promise<void> {
         return;
       }
       try {
+        // Stateless transport can only handle one request; SDK throws on reuse. Create a fresh transport per request.
+        const transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+        });
+        await mcpServer.connect(transport);
         // Do not read req body here — the SDK (via Hono) reads it when converting Node req to Web Request.
-        // If we read the stream first, the SDK gets an empty body and returns "Parse error: Invalid JSON".
         await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res));
       } catch (err) {
         const payload = serializeError(err);
