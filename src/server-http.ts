@@ -12,6 +12,12 @@ const PORT = Number(process.env.PORT) || 3001;
 const MCP_PATH = "/mcp";
 const HEALTH_PATH = "/health";
 
+/** Normalize path for comparison (lowercase, no trailing slash). */
+function normalizePath(raw: string): string {
+  const p = (raw || "").split("?")[0].trim().toLowerCase();
+  return p.endsWith("/") && p.length > 1 ? p.slice(0, -1) : p;
+}
+
 async function readBody(req: http.IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
@@ -40,6 +46,11 @@ function getApiUrlFromRequest(req: http.IncomingMessage): string | undefined {
 }
 
 async function main(): Promise<void> {
+  // Log unhandled rejections (e.g. from SDK after response started) so hosted logs show the real error
+  process.on("unhandledRejection", (reason, promise) => {
+    console.error("[MCP] Unhandled rejection:", reason);
+  });
+
   const mcpServer = createStackbyMcpServer();
   const transport = new StreamableHTTPServerTransport({
     sessionIdGenerator: undefined, // stateless for hosted
@@ -48,7 +59,7 @@ async function main(): Promise<void> {
 
   const server = http.createServer(async (req, res) => {
     const url = req.url ?? "";
-    const path = url.split("?")[0];
+    const path = normalizePath(url);
 
     if (path === HEALTH_PATH && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "text/plain" });
@@ -65,12 +76,21 @@ async function main(): Promise<void> {
         return;
       }
       let parsedBody: unknown;
-      if (req.method === "POST") {
-        parsedBody = await readBody(req);
-      } else {
-        parsedBody = undefined;
+      try {
+        if (req.method === "POST") {
+          parsedBody = await readBody(req);
+        } else {
+          parsedBody = undefined;
+        }
+        await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error("[MCP /mcp] Error handling request:", err);
+        if (!res.headersSent) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "MCP handler error", message }));
+        }
       }
-      await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
       return;
     }
 
