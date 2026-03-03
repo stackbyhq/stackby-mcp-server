@@ -13,6 +13,8 @@ const MCP_PATH = "/mcp";
 const HEALTH_PATH = "/health";
 const OAUTH_AUTHORIZE_PATH = "/oauth/authorize";
 const OAUTH_TOKEN_PATH = "/oauth/token";
+const OAUTH_WELL_KNOWN_PATH = "/.well-known/oauth-authorization-server";
+const OAUTH_MCP_WELL_KNOWN_PATH = "/mcp/.well-known/oauth-authorization-server";
 
 /** Normalize path for comparison (lowercase, no trailing slash). */
 function normalizePath(raw: string): string {
@@ -142,6 +144,25 @@ async function main(): Promise<void> {
           }
         }
       }
+      return;
+    }
+
+    if ((path === OAUTH_WELL_KNOWN_PATH || path === OAUTH_MCP_WELL_KNOWN_PATH) && req.method === "GET") {
+      const host = req.headers.host || "mcp.stackby.com";
+      const protocol = host.includes("localhost") ? "http" : "https";
+      const baseUrl = `${protocol}://${host}`;
+
+      const config = {
+        issuer: baseUrl,
+        authorization_endpoint: `${baseUrl}/oauth/authorize`,
+        token_endpoint: `${baseUrl}/oauth/token`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code", "refresh_token"],
+        token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"]
+      };
+
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify(config));
       return;
     }
 
