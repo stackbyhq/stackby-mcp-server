@@ -156,7 +156,7 @@ async function main(): Promise<void> {
         issuer: baseUrl,
         authorization_endpoint: `${baseUrl}/oauth/authorize`,
         token_endpoint: `${baseUrl}/oauth/token`,
-        jwks_uri: `https://stackby.com/.well-known/jwks.json`, // Delegate to main site
+        jwks_uri: `https://stackby.com/api/.well-known/jwks.json`, // Delegate to main site
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code"], // Stackby reference only supports this
         token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
