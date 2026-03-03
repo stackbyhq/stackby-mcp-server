@@ -138,6 +138,11 @@ This runs `pm2 start dist/server-http.js --name mcp-backend`. Ensure **PM2** is 
 3. Restart Cursor (or reload the window).
 4. Set `STACKBY_API_KEY` (and optionally `STACKBY_API_URL`) in the `env` object. In a chat, check the **tools** list — you should see all 11 tools: **list_stacks**, **list_tables**, **describe_table**, **list_records**, **search_records**, **get_record**, **create_record**, **update_records**, **delete_records**, **create_table**, **create_field**.
 
+> 🔀 **Parameter formats**  
+> Input keys may be provided in either `camelCase` or `snake_case`. The server will
+> automatically convert `workspace_id` → `workspaceId` (and similar) so GPT connectors
+> can send whichever style they prefer.
+
 ## Run (stdio — for Cursor / Claude)
 
 ```bash

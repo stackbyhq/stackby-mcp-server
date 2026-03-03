@@ -172,7 +172,7 @@ async function main(): Promise<void> {
     if (path === OAUTH_AUTHORIZE_PATH && req.method === "GET") {
       // Proxy /oauth/authorize to the main site
       const queryString = url.split("?")[1] || "";
-      const targetUrl = `https://stackby.com/api/oauth/authorize${queryString ? `?${queryString}` : ""}`;
+      const targetUrl = `https://stackby.com/oauth/authorize${queryString ? `?${queryString}` : ""}`;
       res.writeHead(302, { Location: targetUrl });
       res.end();
       return;

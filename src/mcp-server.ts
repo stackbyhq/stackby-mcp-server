@@ -8,6 +8,7 @@ import {
   getApiBaseUrl,
   getWorkspaces,
   getAllStacks,
+  getStacks,
   getTables,
   getTableViewList,
   describeTable,
@@ -27,13 +28,34 @@ export function createStackbyMcpServer(): McpServer {
     version: "0.1.0",
   });
 
+  // helper to convert snake_case keys from the GPT input into camelCase
+  function camelCaseKeys<T extends Record<string, any>>(obj: T): T {
+    const out: any = {};
+    for (const key of Object.keys(obj || {})) {
+      const camel = key.replace(/_([a-z])/g, (_, ch) => ch.toUpperCase());
+      out[camel] = obj[key];
+    }
+    return out;
+  }
+
+  // wrapper that normalizes input before calling the real handler
+  function withCamel<R>(
+    handler: (input: Record<string, any>) => Promise<R>
+  ): (input: any) => Promise<R> {
+    return async (originalInput: any) => {
+      const input = camelCaseKeys<Record<string, any>>(originalInput || {});
+      return handler(input);
+    };
+  }
+
+
   mcpServer.registerTool(
     "list_workspaces",
     {
       description: "List Stackby workspaces the user can access. Requires STACKBY_API_KEY (or PAT) in MCP config.",
       inputSchema: {},
     },
-    async () => {
+    withCamel(async () => {
       if (!hasApiKey()) {
         return {
           content: [
@@ -69,16 +91,20 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
     "list_stacks",
     {
-      description: "List Stackby stacks (bases) the user can access. Requires STACKBY_API_KEY (or PAT) in MCP config.",
-      inputSchema: {},
+      description: "List Stackby stacks (bases) the user can access. Pass workspaceId to filter by workspace. Requires STACKBY_API_KEY (or PAT) in MCP config.",
+      inputSchema: {
+        workspaceId: z.string().optional().describe("Optional Workspace ID to filter stacks by (from list_workspaces)"),
+      },
     },
-    async () => {
+    withCamel(async (input) => {
+      const { workspaceId } = input;
+      const wsId = workspaceId?.trim();
       if (!hasApiKey()) {
         return {
           content: [
@@ -90,10 +116,24 @@ export function createStackbyMcpServer(): McpServer {
         };
       }
       try {
-        const stacks = await getAllStacks();
+        let stacks;
+        if (wsId) {
+          const { list, workspaceName } = await getStacks(wsId);
+          stacks = list.map((s: any) => ({ ...s, workspaceName }));
+        } else {
+          stacks = await getAllStacks();
+        }
+
         const lines = stacks.length === 0
           ? ["No stacks found."]
-          : stacks.map((s) => `- ${s.stackName} (id: ${s.stackId}, workspace: ${s.workspaceName ?? s.workspaceId})`);
+          : stacks.map((s: any) => `- ${s.stackName} (id: ${s.stackId}, workspace: ${s.workspaceName ?? s.workspaceId})`);
+
+        // If there are too many stacks, truncate the output to prevent killing the context window if no workspace is provided.
+        if (!wsId && stacks.length > 200) {
+          lines.splice(200);
+          lines.push(`\n... and ${stacks.length - 200} more. Please provide a specific workspaceId to list_stacks to see more.`);
+        }
+
         return {
           content: [
             {
@@ -114,7 +154,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -125,7 +165,8 @@ export function createStackbyMcpServer(): McpServer {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
       },
     },
-    async ({ stackId }) => {
+    withCamel(async (input) => {
+      const { stackId } = input;
       const id = stackId?.trim();
       if (!id) {
         return {
@@ -163,7 +204,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -175,7 +216,8 @@ export function createStackbyMcpServer(): McpServer {
         tableId: z.string().describe("Table ID (from list_tables)"),
       },
     },
-    async ({ stackId, tableId }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       if (!sId || !tId) {
@@ -218,8 +260,8 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
-  );
+    })
+    );
 
   mcpServer.registerTool(
     "list_records",
@@ -240,7 +282,8 @@ export function createStackbyMcpServer(): McpServer {
         conjuction: z.string().optional().describe("Filter conjunction: 'and' or 'or' (default and)"),
       },
     },
-    async ({ stackId, tableId, maxRecords, offset, rowIds, pageSize, view, filter, sort, latest, filterByFormula, conjuction }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, maxRecords, offset, rowIds, pageSize, view, filter, sort, latest, filterByFormula, conjuction } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       if (!sId || !tId) {
@@ -284,7 +327,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -299,7 +342,8 @@ export function createStackbyMcpServer(): McpServer {
         maxRecords: z.number().optional().describe("Max records to return (default 100)"),
       },
     },
-    async ({ stackId, tableId, searchTerm, fieldIds, maxRecords }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, searchTerm, fieldIds, maxRecords } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       const term = searchTerm?.trim();
@@ -335,7 +379,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -348,7 +392,8 @@ export function createStackbyMcpServer(): McpServer {
         recordId: z.string().describe("Record (row) ID"),
       },
     },
-    async ({ stackId, tableId, recordId }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, recordId } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       const rId = recordId?.trim();
@@ -383,8 +428,8 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
-  );
+    })
+    );
 
   mcpServer.registerTool(
     "create_record",
@@ -396,7 +441,8 @@ export function createStackbyMcpServer(): McpServer {
         fields: z.record(z.string(), z.unknown()).describe("Field values keyed by column name (e.g. { \"Name\": \"Task 1\", \"Status\": \"Done\" })"),
       },
     },
-    async ({ stackId, tableId, fields }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, fields } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       if (!sId || !tId) {
@@ -438,8 +484,8 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
-  );
+    })
+    );
 
   mcpServer.registerTool(
     "update_records",
@@ -460,7 +506,8 @@ export function createStackbyMcpServer(): McpServer {
           .describe("Records to update"),
       },
     },
-    async ({ stackId, tableId, records }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, records } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       if (!sId || !tId) {
@@ -478,7 +525,7 @@ export function createStackbyMcpServer(): McpServer {
         const updated = await updateRows(
           sId,
           tId,
-          records.map((r) => ({ id: r.id, fields: r.fields as Record<string, unknown> }))
+          records.map((r: any) => ({ id: r.id, fields: r.fields as Record<string, unknown> }))
         );
         const lines = updated.map((r) => `- ${r.id}: ${JSON.stringify(r.field)}`);
         const text = [`Updated ${updated.length} record(s):`, "", ...lines].join("\n");
@@ -494,7 +541,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -507,7 +554,8 @@ export function createStackbyMcpServer(): McpServer {
         recordIds: z.array(z.string()).min(1).max(10).describe("Record (row) IDs to delete"),
       },
     },
-    async ({ stackId, tableId, recordIds }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, recordIds } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       if (!sId || !tId) {
@@ -538,7 +586,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -550,7 +598,8 @@ export function createStackbyMcpServer(): McpServer {
         name: z.string().describe("Table name"),
       },
     },
-    async ({ stackId, name }) => {
+    withCamel(async (input) => {
+      const { stackId, name } = input;
       const sId = stackId?.trim();
       const tableName = name?.trim();
       if (!sId || !tableName) {
@@ -580,7 +629,7 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
+    })
   );
 
   mcpServer.registerTool(
@@ -596,7 +645,8 @@ export function createStackbyMcpServer(): McpServer {
         options: z.array(z.string()).optional().describe("For singleOption/multipleOptions: choice labels"),
       },
     },
-    async ({ stackId, tableId, name, columnType, viewId, options }) => {
+    withCamel(async (input) => {
+      const { stackId, tableId, name, columnType, viewId, options } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       const colName = name?.trim();
@@ -636,8 +686,8 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-    }
-  );
+    })
+    );
 
   return mcpServer;
 }
