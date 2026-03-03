@@ -11,6 +11,8 @@ import { runWithRequestContext } from "./request-context.js";
 const PORT = Number(process.env.PORT) || 3001;
 const MCP_PATH = "/mcp";
 const HEALTH_PATH = "/health";
+const OAUTH_AUTHORIZE_PATH = "/oauth/authorize";
+const OAUTH_TOKEN_PATH = "/oauth/token";
 
 /** Normalize path for comparison (lowercase, no trailing slash). */
 function normalizePath(raw: string): string {
@@ -139,6 +141,51 @@ async function main(): Promise<void> {
             // headers already sent
           }
         }
+      }
+      return;
+    }
+
+    if (path === OAUTH_AUTHORIZE_PATH && req.method === "GET") {
+      // Proxy /oauth/authorize to the main site
+      const queryString = url.split("?")[1] || "";
+      const targetUrl = `https://stackby.com/api/oauth/authorize${queryString ? `?${queryString}` : ""}`;
+      res.writeHead(302, { Location: targetUrl });
+      res.end();
+      return;
+    }
+
+    if (path === OAUTH_TOKEN_PATH && req.method === "POST") {
+      // Proxy /oauth/token to the main site
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+        }
+        const rawBody = Buffer.concat(chunks);
+
+        const targetUrl = "https://stackby.com/api/oauth/token";
+
+        // Forward the request to stackby.com/api/oauth/token
+        const proxyRes = await fetch(targetUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": req.headers["content-type"] || "application/x-www-form-urlencoded",
+            ...(req.headers["authorization"] ? { "Authorization": req.headers["authorization"] } : {}),
+            "Accept": "application/json"
+          },
+          body: rawBody,
+        });
+
+        const proxyData = await proxyRes.text();
+
+        res.writeHead(proxyRes.status, {
+          "Content-Type": proxyRes.headers.get("content-type") || "application/json",
+        });
+        res.end(proxyData);
+      } catch (err) {
+        console.error("[OAuth /oauth/token] Error proxying token request:", err);
+        res.writeHead(500, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Failed to proxy token request" }));
       }
       return;
     }

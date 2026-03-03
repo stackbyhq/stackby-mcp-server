@@ -38,7 +38,7 @@ function authHeaders(): HeadersInit {
   return {
     "Content-Type": "application/json",
     "x-api-key": key,
-    ...(key.startsWith("pat_") ? { Authorization: `Bearer ${key}` } : {}),
+    Authorization: `Bearer ${key}`,
   };
 }
 
