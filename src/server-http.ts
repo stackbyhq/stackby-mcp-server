@@ -156,9 +156,12 @@ async function main(): Promise<void> {
         issuer: baseUrl,
         authorization_endpoint: `${baseUrl}/oauth/authorize`,
         token_endpoint: `${baseUrl}/oauth/token`,
+        jwks_uri: `https://stackby.com/.well-known/jwks.json`, // Delegate to main site
         response_types_supported: ["code"],
-        grant_types_supported: ["authorization_code", "refresh_token"],
-        token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"]
+        grant_types_supported: ["authorization_code"], // Stackby reference only supports this
+        token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
+        code_challenge_methods_supported: ["S256"], // Stackby reference only supports S256
+        scopes_supported: ["schema:read", "data:read", "data:write"],
       };
 
       res.writeHead(200, { "Content-Type": "application/json" });
