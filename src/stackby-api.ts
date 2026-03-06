@@ -335,14 +335,26 @@ export interface CreateTableResult {
   [key: string]: unknown;
 }
 
+export interface CreateTableColumn {
+  name: string;
+  type?: string;
+  typeOptions?: unknown;
+  defaultValue?: unknown;
+  showType?: unknown;
+}
+
 /** POST /api/v1/mcp/stacks/:stackId/tables — create a table in a stack (MCP API). */
 export async function createTable(
   stackId: string,
   name: string,
-  _description?: string
+  _description?: string,
+  columns?: CreateTableColumn[]
 ): Promise<CreateTableResult> {
   const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables`;
-  const body = { name: name.trim() };
+  const body: Record<string, unknown> = { name: name.trim() };
+  if (columns && columns.length > 0) {
+    body.columns = columns;
+  }
   const out = await request<CreateTableResult>(path, {
     method: "POST",
     body: JSON.stringify(body),
@@ -352,34 +364,36 @@ export async function createTable(
 
 /** Column types supported by POST /api/v1/columnCreate/:columnType (devapi). */
 export const COLUMN_TYPES = [
-  "shortText",
-  "longText",
-  "number",
-  "checkbox",
-  "dateAndTime",
-  "time",
-  "singleOption",
-  "multipleOptions",
-  "email",
-  "url",
-  "phoneNumber",
-  "rating",
-  "duration",
-  "autoNumber",
-  "createdTime",
-  "updatedTime",
-  "createdBy",
-  "updatedBy",
-  "attachment",
-  "link",
-  "lookup",
-  "lookupCount",
-  "aggregation",
-  "formula",
-  "checkList",
-  "location",
-  "barcode",
-  "signature",
+	"shortText",
+	"longText",
+	"singleCollaborator",
+	"multipleCollaborator",
+	"singleOption",
+	"multipleOptions",
+	"attachment",
+	"checkbox",
+	"dateAndTime",
+	"number",
+	"phoneNumber",
+	"duration",
+	"time",
+	"rating",
+	"formula",
+	"createdTime",
+	"updatedTime",
+	"createdBy",
+	"updatedBy",
+	"checkList",
+	"location",
+	"autoNumber",
+	"email",
+	"url",
+	"barcode",
+	"signature",
+	"link",
+	"lookup",
+	"lookupCount",
+	"aggregation",
 ] as const;
 
 export type ColumnType = (typeof COLUMN_TYPES)[number];
