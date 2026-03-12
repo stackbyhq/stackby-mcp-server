@@ -410,6 +410,29 @@ export const COLUMN_TYPES = [
 
 export type ColumnType = (typeof COLUMN_TYPES)[number];
 
+/** Map lowercase/common variations to valid API column types. */
+const COLUMN_TYPE_ALIASES: Record<string, string> = Object.fromEntries(
+  COLUMN_TYPES.map((t) => [t.toLowerCase(), t])
+);
+COLUMN_TYPE_ALIASES["short text"] = "shortText";
+COLUMN_TYPE_ALIASES["long text"] = "longText";
+COLUMN_TYPE_ALIASES["single option"] = "singleOption";
+COLUMN_TYPE_ALIASES["multiple options"] = "multipleOptions";
+COLUMN_TYPE_ALIASES["date and time"] = "dateAndTime";
+COLUMN_TYPE_ALIASES["phone number"] = "phoneNumber";
+COLUMN_TYPE_ALIASES["created time"] = "createdTime";
+COLUMN_TYPE_ALIASES["updated time"] = "updatedTime";
+COLUMN_TYPE_ALIASES["created by"] = "createdBy";
+COLUMN_TYPE_ALIASES["updated by"] = "updatedBy";
+COLUMN_TYPE_ALIASES["lookup count"] = "lookupCount";
+COLUMN_TYPE_ALIASES["auto number"] = "autoNumber";
+COLUMN_TYPE_ALIASES["multiline text"] = "longText";
+
+export function normalizeColumnType(input: string): string {
+  const trimmed = input?.trim() ?? "";
+  return COLUMN_TYPE_ALIASES[trimmed.toLowerCase()] ?? trimmed;
+}
+
 export interface CreateColumnResult {
   columnId?: string;
   tableId?: string;
@@ -426,11 +449,12 @@ export async function createColumn(
   opts: { viewId?: string; options?: string[] } = {}
 ): Promise<CreateColumnResult> {
   const path = `${MCP_API}/columns`;
+  const normalizedType = normalizeColumnType(columnType);
   const body: Record<string, unknown> = {
     stackId,
     tableId,
     name: name.trim(),
-    columnType,
+    columnType: normalizedType,
     viewId: opts.viewId ?? "",
   };
   if (opts.options && opts.options.length > 0) {
