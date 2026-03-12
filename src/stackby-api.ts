@@ -394,6 +394,18 @@ export const COLUMN_TYPES = [
 	"lookup",
 	"lookupCount",
 	"aggregation",
+	"button",
+	"apiPush",
+	"api",
+	"apiData",
+	"apiDataJson",
+	"apiDataText",
+	"apiDataMultilineText",
+	"apiDataPhone",
+	"apiDataNumber",
+	"apiDataDate",
+	"apiDataDuration",
+	"ai",
 ] as const;
 
 export type ColumnType = (typeof COLUMN_TYPES)[number];
