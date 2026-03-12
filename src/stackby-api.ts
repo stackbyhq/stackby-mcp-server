@@ -433,6 +433,52 @@ export function normalizeColumnType(input: string): string {
   return COLUMN_TYPE_ALIASES[trimmed.toLowerCase()] ?? trimmed;
 }
 
+/** Default typeOptions per column type (matches columnCreate.js). */
+const DEFAULT_TYPE_OPTIONS: Record<string, string> = {
+  shortText: "",
+  longText: '{"selectRichOption":false}',
+  singleCollaborator: "{}",
+  multipleCollaborator: "{}",
+  attachment: '{"attachmentReverse":false}',
+  checkbox: '{"checkBoxIcon":"check"}',
+  singleOption: "", // built from options array
+  multipleOptions: "", // built from options array
+  dateAndTime: '{"isDateTime":false,"isShowZone":false,"dateFormat":"DD/MM/YYYY","timeFormat":"12","selectedParms":"","relationColumnId":"","isDefaultCurrentDate":false}',
+  number: '{"format":"decimal","precision":0,"negative":false,"symbol":"$","validatorName":"positive","currencyPosition":"left","separators":"1,000,000.00","abbreviation":"","showSeparator":false}',
+  phoneNumber: '{"contryCode":null}',
+  duration: '{"durationFormat":"h:mm"}',
+  time: '{"timeFormat":"12"}',
+  rating: '{"selectedRatingIcon":"md-star"}',
+  formula: '{"formulaText":"","formulaTextParsed":"","format":"integer","dateFormat":"DD/MM/YYYY","isDateTime":false,"precision":0,"symbol":"$","timeFormat":"12","currencyPosition":"left","separators":"1,000,000.00","abbreviation":"","showSeparator":false}',
+  createdTime: '{"formulaText":"CREATED_TIME","dateFormat":"DD/MM/YYYY","isDateTime":true,"timeFormat":"12"}',
+  updatedTime: '{"formulaText":"UPDATED_TIME","dateFormat":"DD/MM/YYYY","isDateTime":true,"timeFormat":"12","isForAll":true,"columnIds":[]}',
+  createdBy: "",
+  updatedBy: '{"isForAll":true,"columnIds":[]}',
+  checkList: '{"selectedProgressType":"text","selectedProgressTextType":"total"}',
+  location: '{"durationFormat":"h:mm"}',
+  autoNumber: "null",
+  email: "",
+  url: "",
+  barcode: "",
+  signature: "",
+  link: "", // built from linkToTableId, linkToTableViewId
+  lookup: "",
+  lookupCount: "",
+  aggregation: "",
+  button: "",
+  apiPush: "",
+  api: "",
+  apiData: "",
+  apiDataJson: "",
+  apiDataText: "",
+  apiDataMultilineText: "",
+  apiDataPhone: "",
+  apiDataNumber: "",
+  apiDataDate: "",
+  apiDataDuration: "",
+  ai: "",
+};
+
 export interface CreateColumnResult {
   columnId?: string;
   tableId?: string;
@@ -440,7 +486,7 @@ export interface CreateColumnResult {
   [key: string]: unknown;
 }
 
-/** POST /api/v1/mcp/columns — create a column (MCP API). Body: stackId, tableId, name, columnType, viewId?, options?, linkToTableId?, linkToTableViewId? */
+/** POST /api/v1/mcp/columns — create a column (MCP API). Sends typeOptions matching columnCreate.js format. */
 export async function createColumn(
   stackId: string,
   tableId: string,
@@ -451,23 +497,51 @@ export async function createColumn(
     options?: string[];
     linkToTableId?: string;
     linkToTableViewId?: string;
+    timeFormat?: string;
+    isTimeInclude?: boolean;
+    formulaText?: string;
   } = {}
 ): Promise<CreateColumnResult> {
   const path = `${MCP_API}/columns`;
   const normalizedType = normalizeColumnType(columnType);
+  const viewId = opts.viewId ?? "";
   const body: Record<string, unknown> = {
     stackId,
     tableId,
     name: name.trim(),
     columnType: normalizedType,
-    viewId: opts.viewId ?? "",
+    viewId,
   };
-  if (opts.options && opts.options.length > 0) {
-    body.options = opts.options;
+
+  if (normalizedType === "singleOption" || normalizedType === "multipleOptions") {
+    body.options = opts.options && opts.options.length > 0 ? opts.options : [];
   }
   if (normalizedType === "link") {
     if (opts.linkToTableId) body.linkToTableId = opts.linkToTableId.trim();
     if (opts.linkToTableViewId) body.linkToTableViewId = opts.linkToTableViewId.trim();
+  }
+  if (normalizedType === "dateAndTime") {
+    if (opts.timeFormat) body.timeFormat = opts.timeFormat;
+    if (opts.isTimeInclude != null) body.isTimeInclude = opts.isTimeInclude;
+  }
+  if (normalizedType === "formula" && opts.formulaText?.trim()) {
+    body.formulaText = opts.formulaText.trim();
+  }
+
+  const defaultTypeOpts = DEFAULT_TYPE_OPTIONS[normalizedType];
+  if (defaultTypeOpts !== undefined && defaultTypeOpts !== "") {
+    let typeOpts = defaultTypeOpts;
+    if (normalizedType === "formula" && opts.formulaText?.trim()) {
+      try {
+        const parsed = JSON.parse(typeOpts) as Record<string, unknown>;
+        parsed.formulaText = opts.formulaText.trim();
+        parsed.formulaTextParsed = opts.formulaText.trim();
+        typeOpts = JSON.stringify(parsed);
+      } catch {
+        typeOpts = JSON.stringify({ formulaText: opts.formulaText.trim(), formulaTextParsed: opts.formulaText.trim() });
+      }
+    }
+    body.typeOptions = typeOpts;
   }
   const out = await request<CreateColumnResult>(path, {
     method: "POST",
