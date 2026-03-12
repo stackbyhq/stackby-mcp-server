@@ -635,18 +635,20 @@ export function createStackbyMcpServer(): McpServer {
   mcpServer.registerTool(
     "create_field",
     {
-      description: "Create a new column (field) in a table. Use describe_table to see existing columns. For singleOption/multipleOptions pass options array.",
+      description: "Create a new column (field) in a table. Use describe_table to see existing columns. For singleOption/multipleOptions pass options array. For link columns, you MUST provide linkToTableId (the table to connect to); use list_tables to get table IDs.",
       inputSchema: {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
         tableId: z.string().describe("Table ID (from list_tables)"),
         name: z.string().describe("Column name"),
-        columnType: z.string().describe("Column type: shortText, longText, number, checkbox, dateAndTime, singleOption, multipleOptions, email, url, etc."),
+        columnType: z.string().describe("Column type: shortText, longText, number, checkbox, dateAndTime, singleOption, multipleOptions, email, url, link, etc."),
         viewId: z.string().optional().describe("View ID (optional; first view used if omitted)"),
         options: z.array(z.string()).optional().describe("For singleOption/multipleOptions: choice labels"),
+        linkToTableId: z.string().optional().describe("For link columns: Table ID to connect to (required when columnType is link). Use list_tables to get table IDs."),
+        linkToTableViewId: z.string().optional().describe("For link columns: View ID of the target table (optional; first view used if omitted)"),
       },
     },
     withCamel(async (input) => {
-      const { stackId, tableId, name, columnType, viewId, options } = input;
+      const { stackId, tableId, name, columnType, viewId, options, linkToTableId, linkToTableViewId } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       const colName = name?.trim();
@@ -662,26 +664,43 @@ export function createStackbyMcpServer(): McpServer {
           content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
         };
       }
+      const isLinkType = /^link$/i.test(type);
+      if (isLinkType && !linkToTableId?.trim()) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "To create a link column, you must specify which table to connect to. Please provide linkToTableId (use list_tables to get available table IDs in this stack).",
+          }],
+          isError: true,
+        };
+      }
       try {
         let viewIdToUse = viewId?.trim();
         if (!viewIdToUse) {
           const views = await getTableViewList(sId, tId);
           viewIdToUse = views.length > 0 ? views[0].id : "";
         }
+        let linkToViewId = linkToTableViewId?.trim();
+        if (isLinkType && linkToTableId?.trim() && !linkToViewId) {
+          const linkViews = await getTableViewList(sId, linkToTableId.trim());
+          linkToViewId = linkViews.length > 0 ? linkViews[0].id : "";
+        }
         const result = await createColumn(sId, tId, colName, type, {
           viewId: viewIdToUse,
           options: options && options.length > 0 ? options : undefined,
+          linkToTableId: isLinkType ? linkToTableId?.trim() : undefined,
+          linkToTableViewId: isLinkType ? linkToViewId : undefined,
         });
         const id = result?.columnId ?? result?.id ?? "unknown";
         const text = [`Created column: ${colName}`, `Column ID: ${id}`, `Type: ${type}`].join("\n");
         return {
           content: [{ type: "text" as const, text }],
         };
-      } catch (err) {
+      } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         return {
           content: [
-            { type: "text" as const, text: `Failed to create field: ${message}. Check stackId, tableId, name, columnType (use describe_table for types).` },
+            { type: "text" as const, text: `Failed to create field: ${message}. Check stackId, tableId, name, columnType (use describe_table for types). For link columns, provide linkToTableId.` },
           ],
           isError: true,
         };

@@ -440,13 +440,18 @@ export interface CreateColumnResult {
   [key: string]: unknown;
 }
 
-/** POST /api/v1/mcp/columns — create a column (MCP API). Body: stackId, tableId, name, columnType, viewId?, options? */
+/** POST /api/v1/mcp/columns — create a column (MCP API). Body: stackId, tableId, name, columnType, viewId?, options?, linkToTableId?, linkToTableViewId? */
 export async function createColumn(
   stackId: string,
   tableId: string,
   name: string,
   columnType: string,
-  opts: { viewId?: string; options?: string[] } = {}
+  opts: {
+    viewId?: string;
+    options?: string[];
+    linkToTableId?: string;
+    linkToTableViewId?: string;
+  } = {}
 ): Promise<CreateColumnResult> {
   const path = `${MCP_API}/columns`;
   const normalizedType = normalizeColumnType(columnType);
@@ -459,6 +464,10 @@ export async function createColumn(
   };
   if (opts.options && opts.options.length > 0) {
     body.options = opts.options;
+  }
+  if (normalizedType === "link") {
+    if (opts.linkToTableId) body.linkToTableId = opts.linkToTableId.trim();
+    if (opts.linkToTableViewId) body.linkToTableViewId = opts.linkToTableViewId.trim();
   }
   const out = await request<CreateColumnResult>(path, {
     method: "POST",
