@@ -20,7 +20,47 @@ import {
   deleteRows,
   createTable,
   createColumn,
+  createStack,
 } from "./stackby-api.js";
+import { applyStackTemplate, type TemplateTableInput } from "./stack-template.js";
+
+/** Zod schemas for optional AI-friendly stack templates on create_stack */
+const templateColumnSchema = z.object({
+  name: z.string(),
+  columnType: z.string(),
+  options: z.array(z.string()).optional(),
+  linkToTableKey: z
+    .string()
+    .optional()
+    .describe("For type link: the `key` of the target table in the same `tables` array"),
+  formulaText: z.string().optional(),
+  linkToTableViewId: z.string().optional(),
+});
+
+const templateRowSchema = z.object({
+  rowKey: z
+    .string()
+    .optional()
+    .describe("Stable id for this row; reference from link fields via __linkRowKeys / __linkRowKey"),
+  fields: z
+    .record(z.string(), z.unknown())
+    .describe(
+      'Column name → value. For link columns use { __linkRowKeys: ["rowKeyA","rowKeyB"] } or { __linkRowKey: "rowKeyA" } after those rows are defined (same template order: define linked rows earlier or in an earlier table).'
+    ),
+});
+
+const templateTableSchema = z.object({
+  key: z
+    .string()
+    .optional()
+    .describe("Stable id for this table; required for linkToTableKey from other tables"),
+  name: z
+    .string()
+    .optional()
+    .describe("Table name; required for 2nd+ tables. First table uses the stack default first table."),
+  columns: z.array(templateColumnSchema).optional(),
+  rows: z.array(templateRowSchema).optional(),
+});
 
 export function createStackbyMcpServer(): McpServer {
   const mcpServer = new McpServer({
@@ -150,6 +190,76 @@ export function createStackbyMcpServer(): McpServer {
               type: "text" as const,
               text: `Failed to list stacks: ${message}. STACKBY_API_KEY and STACKBY_API_URL in use: ${getApiBaseUrl()}.`,
             },
+          ],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "create_stack",
+    {
+      description:
+        "Create a new Stackby stack (base) in a workspace. Optionally pass `tables` to define a full template in one call: multiple tables, columns (including link, formula, options), and seed rows. First table maps to the stack's default first table; add more tables with `name`. Use a unique `key` per table and `linkToTableKey` on link columns. For rows, set `rowKey` and reference links via fields like { __linkRowKeys: [\"parent-row-key\"] }. Order tables so linked tables (parents) appear before dependents; order rows so referenced rowKeys exist before link fields use them.",
+      inputSchema: {
+        workspaceId: z.string().describe("Workspace ID to create the stack in (from list_workspaces)"),
+        name: z.string().describe("Name for the new stack (1-150 chars)"),
+        color: z.string().optional().describe("Hex color for the stack icon (default #30A9DE)"),
+        icon: z.string().optional().describe("Icon name (default ios-bulb)"),
+        tables: z
+          .array(templateTableSchema)
+          .optional()
+          .describe(
+            "Optional template: tables with columns and rows. Omit for an empty default stack only."
+          ),
+      },
+    },
+    withCamel(async (input) => {
+      const { workspaceId, name, color, icon, tables } = input;
+      const wsId = workspaceId?.trim();
+      const stackName = name?.trim();
+      if (!wsId || !stackName) {
+        return {
+          content: [{ type: "text" as const, text: "workspaceId and name are required. Use list_workspaces to get workspace IDs." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+        };
+      }
+      try {
+        const result = await createStack(wsId, stackName, {
+          color: color?.trim() || undefined,
+          icon: icon?.trim() || undefined,
+        });
+        const id = result?.stackId ?? (result as any)?.id ?? "unknown";
+        const returnedName = result?.stackName ?? stackName;
+        const lines = [
+          `Created stack: ${returnedName}`,
+          `Stack ID: ${id}`,
+          `Workspace: ${wsId}`,
+        ];
+        const tpl = Array.isArray(tables) ? tables : [];
+        if (tpl.length > 0) {
+          const applied = await applyStackTemplate(id, tpl as TemplateTableInput[]);
+          if (applied.tableSummaries.length > 0) {
+            lines.push("", "Template applied:", ...applied.tableSummaries.map((s) => `  ${s}`));
+          }
+          if (applied.warnings.length > 0) {
+            lines.push("", "Template warnings:", ...applied.warnings.map((w) => `  - ${w}`));
+          }
+        }
+        return {
+          content: [{ type: "text" as const, text: lines.join("\n") }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            { type: "text" as const, text: `Failed to create stack: ${message}. Check workspaceId, stack name, and plan limits.` },
           ],
           isError: true,
         };

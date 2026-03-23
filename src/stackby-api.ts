@@ -327,6 +327,39 @@ export async function deleteRows(
   return out.data ?? { records: [] };
 }
 
+// --- Stack Create API ---
+
+export interface CreateStackResult {
+  stackId?: string;
+  stackName?: string;
+  workspaceId?: string;
+  color?: string;
+  icon?: string;
+  [key: string]: unknown;
+}
+
+/** POST /api/v1/mcp/stacks/create — create a new stack (base) in a workspace. */
+export async function createStack(
+  workspaceId: string,
+  name: string,
+  opts: { color?: string; icon?: string } = {}
+): Promise<CreateStackResult> {
+  const path = `${MCP_API}/stacks/create`;
+  const body: Record<string, unknown> = {
+    name: name.trim(),
+    workspaceId,
+  };
+  if (opts.color) body.color = opts.color;
+  if (opts.icon) body.icon = opts.icon;
+  const out = await request<CreateStackResult | CreateStackResult[]>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  const data = out.data;
+  if (Array.isArray(data)) return data[0] ?? {};
+  return data ?? {};
+}
+
 // --- Schema APIs (Phase 4: create only) ---
 
 export interface CreateTableResult {
