@@ -1,11 +1,19 @@
 /**
  * Apply a declarative stack template after stack creation (tables, columns, rows, links).
  * Orchestrates existing MCP APIs: createTable, createColumn, createRow.
+ *
+ * Management strategy:
+ * - **Table order**: Topologically sort tables so any table **linked to** appears before tables that hold the link
+ *   (so the default first table is usually a good parent, e.g. Companies before Tasks).
+ * - **Columns**: Base types → **link** → **formula** (can reference other columns) → **lookup / lookupCount / aggregation**
+ *   (need `linkColumnId` + foreign `linkedColumnId` per Stackby API).
+ * - **Row order**: Same sorted table order so parent rows tend to exist before child rows that use `__linkRowKeys`.
  */
 import {
   createColumn,
   createRow,
   createTable,
+  describeTable,
   getTableViewList,
   getTables,
   normalizeColumnType,
@@ -15,22 +23,32 @@ export interface TemplateColumnInput {
   name: string;
   columnType: string;
   options?: string[];
-  /** Target table `key` in the same template (for link columns). */
+  /** For type `link`: the `key` of the target table in the same `tables` array. */
   linkToTableKey?: string;
   formulaText?: string;
   linkToTableViewId?: string;
+  /**
+   * For lookup / lookupCount / aggregation: the **name** of an existing **link** column on this table
+   * (after that link column is created). Alternative to `linkColumnId`.
+   */
+  linkColumnName?: string;
+  /** Explicit link column id (same table). */
+  linkColumnId?: string;
+  /**
+   * For lookup / aggregation: column **name** on the **linked** (foreign) table to pull or roll up.
+   * Resolved after foreign table columns exist. Alternative to `linkedColumnId`.
+   */
+  linkedColumnName?: string;
+  linkedColumnId?: string;
 }
 
 export interface TemplateRowInput {
-  /** Stable id for this row; other rows can reference it in link fields via __linkRowKeys / __linkRowKey. */
   rowKey?: string;
   fields: Record<string, unknown>;
 }
 
 export interface TemplateTableInput {
-  /** Stable id for this table; use in linkToTableKey from other tables. */
   key?: string;
-  /** Display name. Required for 2nd+ tables (new tables). First table uses the stack's default first table. */
   name?: string;
   columns?: TemplateColumnInput[];
   rows?: TemplateRowInput[];
@@ -50,12 +68,76 @@ function normType(c: TemplateColumnInput): string {
   return normalizeColumnType(c.columnType);
 }
 
+function tableKeyFor(tables: TemplateTableInput[], index: number): string {
+  const t = tables[index];
+  return t.key?.trim() || slug(t.name ?? `table-${index}`);
+}
+
+function tableKeysInOrder(tables: TemplateTableInput[]): string[] {
+  return tables.map((_, i) => tableKeyFor(tables, i));
+}
+
+/**
+ * If table i has a link column to table key K, then index(K) must come before i.
+ * Returns indices in a valid creation order (Kahn topological sort).
+ */
+function sortTableIndicesByLinkDependencies(tables: TemplateTableInput[]): number[] {
+  const n = tables.length;
+  if (n <= 1) return Array.from({ length: n }, (_, i) => i);
+
+  const keys = tableKeysInOrder(tables);
+  const indegree = new Array(n).fill(0);
+  const graph: number[][] = Array.from({ length: n }, () => []);
+
+  for (let i = 0; i < n; i++) {
+    const deps = new Set<number>();
+    for (const col of tables[i].columns ?? []) {
+      if (normType(col).toLowerCase() !== "link") continue;
+      const lk = col.linkToTableKey?.trim();
+      if (!lk) continue;
+      const j = keys.indexOf(lk);
+      if (j >= 0 && j !== i) deps.add(j);
+    }
+    indegree[i] = deps.size;
+    for (const j of deps) graph[j].push(i);
+  }
+
+  const q: number[] = [];
+  for (let i = 0; i < n; i++) if (indegree[i] === 0) q.push(i);
+  const out: number[] = [];
+  while (q.length) {
+    const i = q.shift()!;
+    out.push(i);
+    for (const t of graph[i]) {
+      indegree[t]--;
+      if (indegree[t] === 0) q.push(t);
+    }
+  }
+
+  if (out.length !== n) {
+    for (let i = 0; i < n; i++) if (!out.includes(i)) out.push(i);
+  }
+  return out;
+}
+
+function colRegistryKey(tableKey: string, columnName: string): string {
+  return `${tableKey}::${columnName.trim()}`;
+}
+
+async function resolveColumnIdByName(
+  stackId: string,
+  tableId: string,
+  columnName: string,
+  warnings: string[]
+): Promise<string | undefined> {
+  const schema = await describeTable(stackId, tableId);
+  const f = schema.fields.find((x) => x.name.trim() === columnName.trim());
+  if (!f) warnings.push(`Column "${columnName}" not found on table ${tableId}`);
+  return f?.id;
+}
+
 /**
  * After POST /mcp/stacks/create, applies optional tables/columns/rows.
- * - First template table maps to the stack's existing first table (from default stack creation).
- * - Additional template entries create new tables via createTable.
- * - Columns: non-link types first, then link (needs linkToTableKey -> table key), then formula/lookup/aggregation.
- * - Rows: use rowKey; in link fields use `{ __linkRowKeys: ["otherRowKey"] }` or `{ __linkRowKey: "otherRowKey" }`.
  */
 export async function applyStackTemplate(
   stackId: string,
@@ -64,6 +146,7 @@ export async function applyStackTemplate(
   const warnings: string[] = [];
   const tableSummaries: string[] = [];
   const keyToTableId = new Map<string, string>();
+  const columnIdByKey = new Map<string, string>();
 
   if (!tables.length) {
     return { tableSummaries, warnings };
@@ -75,9 +158,19 @@ export async function applyStackTemplate(
     return { tableSummaries, warnings };
   }
 
-  for (let i = 0; i < tables.length; i++) {
-    const t = tables[i];
-    const tableKey = t.key?.trim() || slug(t.name ?? `table-${i}`);
+  const order = sortTableIndicesByLinkDependencies(tables);
+  const sortedTables = order.map((i) => tables[i]);
+  if (order.some((v, i) => v !== i)) {
+    tableSummaries.push(
+      `Tables reordered by link dependencies: ${order.map((i) => tableKeyFor(tables, i)).join(" → ")}`
+    );
+  }
+
+  const sortedKeys = tableKeysInOrder(sortedTables);
+
+  for (let i = 0; i < sortedTables.length; i++) {
+    const t = sortedTables[i];
+    const tableKey = sortedKeys[i];
     let tableId: string;
 
     if (i === 0) {
@@ -93,9 +186,7 @@ export async function applyStackTemplate(
           (created.tableId as string) ||
           (created as { id?: string }).id ||
           "";
-        if (!tableId) {
-          throw new Error("createTable response missing tableId");
-        }
+        if (!tableId) throw new Error("createTable response missing tableId");
         tableSummaries.push(`Created table "${tname}" (${tableId}), key "${tableKey}"`);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -107,12 +198,8 @@ export async function applyStackTemplate(
     keyToTableId.set(tableKey, tableId);
   }
 
-  // --- Columns (all tables) ---
-  for (let i = 0; i < tables.length; i++) {
-    const t = tables[i];
-    const tableKey = t.key?.trim() || slug(t.name ?? `table-${i}`);
-    const tableId = keyToTableId.get(tableKey);
-    if (!tableId || !t.columns?.length) continue;
+  const runColumnPhases = async (t: TemplateTableInput, tableKey: string, tableId: string) => {
+    if (!t.columns?.length) return;
 
     let viewId = "";
     try {
@@ -123,78 +210,134 @@ export async function applyStackTemplate(
     }
 
     const cols = t.columns;
-    const phase1 = cols.filter((c) => {
-      const nt = normType(c).toLowerCase();
-      return (
-        nt !== "link" &&
-        nt !== "lookup" &&
-        nt !== "lookupcount" &&
-        nt !== "aggregation" &&
-        nt !== "formula"
-      );
-    });
-    const phase2 = cols.filter((c) => normType(c).toLowerCase() === "link");
-    const phase3 = cols.filter((c) => {
-      const nt = normType(c).toLowerCase();
-      return (
-        nt === "lookup" ||
-        nt === "lookupcount" ||
-        nt === "aggregation" ||
-        nt === "formula"
-      );
-    });
+    const ntLower = (c: TemplateColumnInput) => normType(c).toLowerCase();
 
-    const runPhase = async (list: TemplateColumnInput[], phaseLabel: string) => {
-      for (const col of list) {
-        try {
-          const nt = normType(col);
-          const lt = nt.toLowerCase();
-          let linkToTableId: string | undefined;
-          let linkToTableViewId: string | undefined;
+    const phaseBase = cols.filter(
+      (c) =>
+        !["link", "lookup", "lookupcount", "aggregation", "formula"].includes(ntLower(c))
+    );
+    const phaseLink = cols.filter((c) => ntLower(c) === "link");
+    const phaseFormula = cols.filter((c) => ntLower(c) === "formula");
+    const phaseRollup = cols.filter((c) =>
+      ["lookup", "lookupcount", "aggregation"].includes(ntLower(c))
+    );
 
-          if (lt === "link") {
-            const tk = col.linkToTableKey?.trim();
-            if (!tk) {
-              warnings.push(`Link column "${col.name}" (${tableKey}): linkToTableKey is required`);
-              continue;
-            }
-            linkToTableId = keyToTableId.get(tk);
-            if (!linkToTableId) {
-              warnings.push(`Link column "${col.name}": unknown linkToTableKey "${tk}"`);
-              continue;
-            }
-            if (col.linkToTableViewId?.trim()) {
-              linkToTableViewId = col.linkToTableViewId.trim();
-            } else {
-              const lv = await getTableViewList(stackId, linkToTableId);
-              linkToTableViewId = lv[0]?.id ?? "";
-            }
-          }
+    const createOne = async (col: TemplateColumnInput, phaseLabel: string) => {
+      const nt = normType(col);
+      const lt = nt.toLowerCase();
+      let linkToTableId: string | undefined;
+      let linkToTableViewId: string | undefined;
+      let linkColumnId: string | undefined;
+      let linkedColumnId: string | undefined;
 
-          if (lt === "formula" && !col.formulaText?.trim()) {
-            warnings.push(`Formula column "${col.name}" (${tableKey}): formulaText is recommended`);
-          }
-
-          await createColumn(stackId, tableId, col.name, col.columnType, {
-            viewId,
-            options: col.options,
-            linkToTableId,
-            linkToTableViewId,
-            formulaText: col.formulaText,
-          });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          warnings.push(`${phaseLabel} column "${col.name}" on table key "${tableKey}": ${msg}`);
+      if (lt === "link") {
+        const tk = col.linkToTableKey?.trim();
+        if (!tk) {
+          warnings.push(`Link column "${col.name}" (${tableKey}): linkToTableKey is required`);
+          return;
         }
+        linkToTableId = keyToTableId.get(tk);
+        if (!linkToTableId) {
+          warnings.push(`Link column "${col.name}": unknown linkToTableKey "${tk}"`);
+          return;
+        }
+        if (col.linkToTableViewId?.trim()) {
+          linkToTableViewId = col.linkToTableViewId.trim();
+        } else {
+          const lv = await getTableViewList(stackId, linkToTableId);
+          linkToTableViewId = lv[0]?.id ?? "";
+        }
+      }
+
+      if (lt === "formula" && !col.formulaText?.trim()) {
+        warnings.push(`Formula column "${col.name}" (${tableKey}): formulaText is usually required`);
+      }
+
+      if (["lookup", "lookupcount", "aggregation"].includes(lt)) {
+        const tk = col.linkToTableKey?.trim();
+        if (!tk) {
+          warnings.push(
+            `${phaseLabel} "${col.name}": linkToTableKey is required (template key of the linked table)`
+          );
+          return;
+        }
+        linkToTableId = keyToTableId.get(tk);
+        if (!linkToTableId) {
+          warnings.push(`Column "${col.name}": unknown linkToTableKey "${tk}"`);
+          return;
+        }
+
+        if (col.linkColumnId?.trim()) {
+          linkColumnId = col.linkColumnId.trim();
+        } else if (col.linkColumnName?.trim()) {
+          linkColumnId = columnIdByKey.get(colRegistryKey(tableKey, col.linkColumnName));
+          if (!linkColumnId) {
+            warnings.push(
+              `${phaseLabel} "${col.name}": no column id for linkColumnName "${col.linkColumnName}" (create the link column first in this template)`
+            );
+            return;
+          }
+        } else {
+          warnings.push(
+            `${phaseLabel} "${col.name}": set linkColumnName or linkColumnId for the link column on this table`
+          );
+          return;
+        }
+
+        if (lt === "lookup" || lt === "aggregation") {
+          if (col.linkedColumnId?.trim()) {
+            linkedColumnId = col.linkedColumnId.trim();
+          } else if (col.linkedColumnName?.trim()) {
+            linkedColumnId = await resolveColumnIdByName(
+              stackId,
+              linkToTableId,
+              col.linkedColumnName,
+              warnings
+            );
+            if (!linkedColumnId) return;
+          } else {
+            warnings.push(
+              `${phaseLabel} "${col.name}": set linkedColumnName or linkedColumnId on the linked table`
+            );
+            return;
+          }
+        }
+      }
+
+      try {
+        const result = await createColumn(stackId, tableId, col.name, col.columnType, {
+          viewId,
+          options: col.options,
+          linkToTableId,
+          linkToTableViewId,
+          formulaText: col.formulaText,
+          linkColumnId,
+          linkedColumnId,
+        });
+        const newId = (result.columnId as string) || (result as { id?: string }).id;
+        if (newId) {
+          columnIdByKey.set(colRegistryKey(tableKey, col.name), newId);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        warnings.push(`${phaseLabel} column "${col.name}" on table key "${tableKey}": ${msg}`);
       }
     };
 
-    await runPhase(phase1, "Base");
-    await runPhase(phase2, "Link");
-    await runPhase(phase3, "Formula/Lookup");
+    for (const col of phaseBase) await createOne(col, "Base");
+    for (const col of phaseLink) await createOne(col, "Link");
+    for (const col of phaseFormula) await createOne(col, "Formula");
+    for (const col of phaseRollup) await createOne(col, "Lookup/Rollup");
+  };
+
+  for (let i = 0; i < sortedTables.length; i++) {
+    const t = sortedTables[i];
+    const tableKey = sortedKeys[i];
+    const tableId = keyToTableId.get(tableKey);
+    if (!tableId) continue;
+    await runColumnPhases(t, tableKey, tableId);
   }
 
-  // --- Rows (stable rowKeys for link resolution) ---
   const rowKeyToId = new Map<string, string>();
 
   const resolveFieldValue = (val: unknown): unknown => {
@@ -221,9 +364,9 @@ export async function applyStackTemplate(
     return val;
   };
 
-  for (let i = 0; i < tables.length; i++) {
-    const t = tables[i];
-    const tableKey = t.key?.trim() || slug(t.name ?? `table-${i}`);
+  for (let i = 0; i < sortedTables.length; i++) {
+    const t = sortedTables[i];
+    const tableKey = sortedKeys[i];
     const tableId = keyToTableId.get(tableKey);
     if (!tableId || !t.rows?.length) continue;
 

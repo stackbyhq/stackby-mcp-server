@@ -338,12 +338,23 @@ export interface CreateStackResult {
   [key: string]: unknown;
 }
 
-/** POST /api/v1/mcp/stacks/create — create a new stack (base) in a workspace. */
+export interface CreateStackTemplateMeta {
+  tableSummaries?: string[];
+  warnings?: string[];
+}
+
+export interface CreateStackWithTemplateResult {
+  stack: CreateStackResult;
+  /** Present when the API applied a `tables` template server-side (developer stackCreate). */
+  template?: CreateStackTemplateMeta;
+}
+
+/** POST /api/v1/mcp/stacks/create — create a new stack (base) in a workspace. Optional `tables` are applied on the server. */
 export async function createStack(
   workspaceId: string,
   name: string,
-  opts: { color?: string; icon?: string } = {}
-): Promise<CreateStackResult> {
+  opts: { color?: string; icon?: string; tables?: unknown[] } = {}
+): Promise<CreateStackWithTemplateResult> {
   const path = `${MCP_API}/stacks/create`;
   const body: Record<string, unknown> = {
     name: name.trim(),
@@ -351,13 +362,31 @@ export async function createStack(
   };
   if (opts.color) body.color = opts.color;
   if (opts.icon) body.icon = opts.icon;
-  const out = await request<CreateStackResult | CreateStackResult[]>(path, {
+  if (opts.tables && opts.tables.length > 0) body.tables = opts.tables;
+
+  const base = getEffectiveBaseUrl();
+  const url = `${base}${path}`;
+  const res = await fetch(url, {
     method: "POST",
+    headers: { ...authHeaders() },
     body: JSON.stringify(body),
   });
-  const data = out.data;
-  if (Array.isArray(data)) return data[0] ?? {};
-  return data ?? {};
+  const full = (await res.json().catch(() => ({}))) as {
+    data?: CreateStackResult | CreateStackResult[];
+    template?: CreateStackTemplateMeta;
+    error?: string;
+    message?: string;
+  };
+  if (!res.ok) {
+    const msg = full?.error ?? full?.message ?? res.statusText;
+    throw new Error(`Stackby API ${res.status}: ${msg}`);
+  }
+  const data = full.data;
+  const stack = Array.isArray(data) ? data[0] ?? {} : data ?? {};
+  return {
+    stack,
+    template: full.template,
+  };
 }
 
 // --- Schema APIs (Phase 4: create only) ---
@@ -460,6 +489,8 @@ COLUMN_TYPE_ALIASES["updated by"] = "updatedBy";
 COLUMN_TYPE_ALIASES["lookup count"] = "lookupCount";
 COLUMN_TYPE_ALIASES["auto number"] = "autoNumber";
 COLUMN_TYPE_ALIASES["multiline text"] = "longText";
+COLUMN_TYPE_ALIASES["rollup"] = "aggregation";
+COLUMN_TYPE_ALIASES["roll up"] = "aggregation";
 
 export function normalizeColumnType(input: string): string {
   const trimmed = input?.trim() ?? "";
@@ -533,6 +564,10 @@ export async function createColumn(
     timeFormat?: string;
     isTimeInclude?: boolean;
     formulaText?: string;
+    /** Same-table link column id (lookup / lookupCount / aggregation). */
+    linkColumnId?: string;
+    /** Column id on the linked (foreign) table to read or roll up (lookup / aggregation). */
+    linkedColumnId?: string;
   } = {}
 ): Promise<CreateColumnResult> {
   const path = `${MCP_API}/columns`;
@@ -559,6 +594,16 @@ export async function createColumn(
   }
   if (normalizedType === "formula" && opts.formulaText?.trim()) {
     body.formulaText = opts.formulaText.trim();
+  }
+
+  if (
+    normalizedType === "lookup" ||
+    normalizedType === "lookupCount" ||
+    normalizedType === "aggregation"
+  ) {
+    if (opts.linkToTableId) body.linkToTableId = opts.linkToTableId.trim();
+    if (opts.linkColumnId) body.linkColumnId = opts.linkColumnId.trim();
+    if (opts.linkedColumnId) body.linkedColumnId = opts.linkedColumnId.trim();
   }
 
   const defaultTypeOpts = DEFAULT_TYPE_OPTIONS[normalizedType];

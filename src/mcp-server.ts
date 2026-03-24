@@ -32,9 +32,21 @@ const templateColumnSchema = z.object({
   linkToTableKey: z
     .string()
     .optional()
-    .describe("For type link: the `key` of the target table in the same `tables` array"),
+    .describe(
+      "For link: target table `key`. For lookup / lookupCount / aggregation: same — the linked table's template key."
+    ),
   formulaText: z.string().optional(),
   linkToTableViewId: z.string().optional(),
+  linkColumnName: z
+    .string()
+    .optional()
+    .describe("For lookup / rollup / count: name of the link column on this table (must appear earlier in columns)"),
+  linkColumnId: z.string().optional(),
+  linkedColumnName: z
+    .string()
+    .optional()
+    .describe("For lookup / aggregation: column name on the linked table to pull or roll up"),
+  linkedColumnId: z.string().optional(),
 });
 
 const templateRowSchema = z.object({
@@ -201,7 +213,7 @@ export function createStackbyMcpServer(): McpServer {
     "create_stack",
     {
       description:
-        "Create a new Stackby stack (base) in a workspace. Optionally pass `tables` to define a full template in one call: multiple tables, columns (including link, formula, options), and seed rows. First table maps to the stack's default first table; add more tables with `name`. Use a unique `key` per table and `linkToTableKey` on link columns. For rows, set `rowKey` and reference links via fields like { __linkRowKeys: [\"parent-row-key\"] }. Order tables so linked tables (parents) appear before dependents; order rows so referenced rowKeys exist before link fields use them.",
+        "Create a new Stackby stack (base) in a workspace. Optionally pass `tables` for a full template: tables are auto-ordered so link targets come first. First logical table maps to the stack's default first sheet; others use `name` + createTable. Columns: use `linkToTableKey` + `linkColumnName` + `linkedColumnName` for lookup and rollup (aggregation); use `lookupCount` + `linkColumnName` + `linkToTableKey` for counts. Formula runs after base+link columns. Rows: `rowKey` and { __linkRowKeys: [\"key\"] } for links.",
       inputSchema: {
         workspaceId: z.string().describe("Workspace ID to create the stack in (from list_workspaces)"),
         name: z.string().describe("Name for the new stack (1-150 chars)"),
@@ -231,25 +243,33 @@ export function createStackbyMcpServer(): McpServer {
         };
       }
       try {
-        const result = await createStack(wsId, stackName, {
+        const tpl = Array.isArray(tables) ? tables : [];
+        const { stack, template } = await createStack(wsId, stackName, {
           color: color?.trim() || undefined,
           icon: icon?.trim() || undefined,
+          tables: tpl.length > 0 ? tpl : undefined,
         });
-        const id = result?.stackId ?? (result as any)?.id ?? "unknown";
-        const returnedName = result?.stackName ?? stackName;
+        const id = stack?.stackId ?? (stack as any)?.id ?? "unknown";
+        const returnedName = stack?.stackName ?? stackName;
         const lines = [
           `Created stack: ${returnedName}`,
           `Stack ID: ${id}`,
           `Workspace: ${wsId}`,
         ];
-        const tpl = Array.isArray(tables) ? tables : [];
-        if (tpl.length > 0) {
+        if (tpl.length > 0 && !template) {
           const applied = await applyStackTemplate(id, tpl as TemplateTableInput[]);
           if (applied.tableSummaries.length > 0) {
-            lines.push("", "Template applied:", ...applied.tableSummaries.map((s) => `  ${s}`));
+            lines.push("", "Template applied (client):", ...applied.tableSummaries.map((s) => `  ${s}`));
           }
           if (applied.warnings.length > 0) {
             lines.push("", "Template warnings:", ...applied.warnings.map((w) => `  - ${w}`));
+          }
+        } else {
+          if (template?.tableSummaries?.length) {
+            lines.push("", "Template applied:", ...template.tableSummaries.map((s) => `  ${s}`));
+          }
+          if (template?.warnings?.length) {
+            lines.push("", "Template warnings:", ...template.warnings.map((w) => `  - ${w}`));
           }
         }
         return {
