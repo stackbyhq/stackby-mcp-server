@@ -674,3 +674,43 @@ export async function createColumn(
   });
   return out.data ?? {};
 }
+
+/**
+ * POST /api/v1/mcp/stacks/:stackId/dashboard-actions/:id/:action
+ * Same behavior as session POST /api/v1/dashboardaction/:id/:action; stackId may be omitted in the body (taken from the URL).
+ * Actions: create, update, getblocks, positionupdate, move.
+ */
+export async function mcpDashboardAction(
+  stackId: string,
+  id: string,
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/dashboard-actions/${encodeURIComponent(id)}/${encodeURIComponent(action)}`;
+  const payload = { ...body, stackId: (body.stackId as string | undefined) ?? stackId };
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return out.data;
+}
+
+/**
+ * POST /api/v1/mcp/stacks/:stackId/block-actions/:id/:action
+ * Same behavior as session POST /api/v1/blockaction/:id/:action; stackId may be omitted in the body (taken from the URL).
+ * Actions: create, update, duplicate, move.
+ */
+export async function mcpBlockAction(
+  stackId: string,
+  id: string,
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/block-actions/${encodeURIComponent(id)}/${encodeURIComponent(action)}`;
+  const payload = { ...body, stackId: (body.stackId as string | undefined) ?? stackId };
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return out.data;
+}

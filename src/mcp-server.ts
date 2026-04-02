@@ -24,6 +24,8 @@ import {
   createTable,
   createColumn,
   createStack,
+  mcpDashboardAction,
+  mcpBlockAction,
 } from "./stackby-api.js";
 import { applyStackTemplate, type TemplateTableInput } from "./stack-template.js";
 
@@ -1029,6 +1031,96 @@ export function createStackbyMcpServer(): McpServer {
       }
     })
     );
+
+  mcpServer.registerTool(
+    "dashboard_action",
+    {
+      description:
+        "Run a dashboard action via the MCP developer API (same rules as the app). stackId can be omitted in `body` (it is taken from the URL). Actions: create (body: name; id = new dashboard id), update, getblocks, positionupdate, move. See Stackby dashboard API docs for field shapes.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        id: z.string().describe("Dashboard ID (for create, use a new unique id)"),
+        action: z.string().describe("create | update | getblocks | positionupdate | move"),
+        body: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Action payload (e.g. { name } for create). stackId is optional; URL stackId is used if omitted."),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, id, action, body: actionBody } = input;
+      const sId = stackId?.trim();
+      const dashId = id?.trim();
+      const act = action?.trim();
+      if (!sId || !dashId || !act) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, id, and action are required." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+        };
+      }
+      try {
+        const data = await mcpDashboardAction(sId, dashId, act, (actionBody as Record<string, unknown>) ?? {});
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `dashboard_action failed: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "block_action",
+    {
+      description:
+        "Run a block action via the MCP developer API. stackId can be omitted in `body` (it is taken from the URL). Actions: create, update, duplicate, move. Create requires dashboardId, name, type, and layout fields per Stackby validation.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        id: z.string().describe("Block ID (for create, use a new unique id)"),
+        action: z.string().describe("create | update | duplicate | move"),
+        body: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Action payload matching blockaction API (e.g. dashboardId, name, type for create)."),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, id, action, body: actionBody } = input;
+      const sId = stackId?.trim();
+      const blockId = id?.trim();
+      const act = action?.trim();
+      if (!sId || !blockId || !act) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, id, and action are required." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+        };
+      }
+      try {
+        const data = await mcpBlockAction(sId, blockId, act, (actionBody as Record<string, unknown>) ?? {});
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `block_action failed: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
 
   return mcpServer;
 }
