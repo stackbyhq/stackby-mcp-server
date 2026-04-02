@@ -146,6 +146,7 @@ export interface TableView {
   id: string;
   name: string;
   tableId: string;
+  type?: string;
 }
 
 /** GET /api/v1/mcp/stacks/:stackId/tables/:tableId/columns — list columns (MCP API only). */
@@ -160,6 +161,52 @@ export async function getTableViewList(stackId: string, tableId: string): Promis
   const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/views`;
   const out = await request<TableView[]>(path, { method: "GET" });
   return Array.isArray(out.data) ? out.data : [];
+}
+
+/** POST /api/v1/mcp/stacks/:stackId/tables/:tableId/views — create a view (forwards to viewActions create). */
+export async function createView(
+  stackId: string,
+  tableId: string,
+  body: {
+    name: string;
+    type?: string;
+    copyMode?: "new" | "duplicate";
+    copyViewId?: string;
+    sequenceViewId?: string;
+    description?: string;
+    groupLevels?: unknown;
+    isPersonal?: unknown;
+    password?: string;
+  }
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/views`;
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return out.data;
+}
+
+/** PATCH /api/v1/mcp/stacks/:stackId/tables/:tableId/views/:viewId — rename a view. */
+export async function renameView(
+  stackId: string,
+  tableId: string,
+  viewId: string,
+  body: { name: string; description?: string }
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/views/${encodeURIComponent(viewId)}`;
+  const out = await request<unknown>(path, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return out.data;
+}
+
+/** DELETE /api/v1/mcp/stacks/:stackId/tables/:tableId/views/:viewId — soft-delete a view. */
+export async function deleteView(stackId: string, tableId: string, viewId: string): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/views/${encodeURIComponent(viewId)}`;
+  const out = await request<unknown>(path, { method: "DELETE" });
+  return out.data;
 }
 
 export interface DescribeTableResult {

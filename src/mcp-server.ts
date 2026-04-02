@@ -11,6 +11,9 @@ import {
   getStacks,
   getTables,
   getTableViewList,
+  createView,
+  renameView,
+  deleteView,
   describeTable,
   getRowList,
   searchRecords,
@@ -281,6 +284,193 @@ export function createStackbyMcpServer(): McpServer {
           content: [
             { type: "text" as const, text: `Failed to create stack: ${message}. Check workspaceId, stack name, and plan limits.` },
           ],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "list_views",
+    {
+      description: "List views for a table (grid, kanban, etc.). Use list_tables to get stackId and tableId.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      if (!sId || !tId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and tableId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+        };
+      }
+      try {
+        const views = await getTableViewList(sId, tId);
+        const lines =
+          views.length === 0
+            ? ["No views found."]
+            : views.map((v) => `- ${v.name} (id: ${v.id}, type: ${v.type ?? "grid"})`);
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Views in table ${tId} (${views.length}):\n${lines.join("\n")}`,
+            },
+          ],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to list views: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "create_view",
+    {
+      description:
+        "Create a new view on a table. Defaults copy column order from the first existing view. Use type: grid, kanban, gallery, calendar, form, etc. For duplicate mode set copyMode to duplicate and copyViewId to the source view id.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        tableId: z.string().describe("Table ID"),
+        name: z.string().describe("View name"),
+        type: z.string().optional().describe("View type (default grid)"),
+        copyMode: z.enum(["new", "duplicate"]).optional(),
+        copyViewId: z.string().optional().describe("Required if copyMode is duplicate"),
+        sequenceViewId: z.string().optional().describe("View to copy column/row order from (default: first view)"),
+        description: z.string().optional(),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, name, type, copyMode, copyViewId, sequenceViewId, description } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const vName = name?.trim();
+      if (!sId || !tId || !vName) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, tableId, and name are required." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set." }],
+        };
+      }
+      try {
+        const result = await createView(sId, tId, {
+          name: vName,
+          type: type?.trim() || undefined,
+          copyMode: copyMode as "new" | "duplicate" | undefined,
+          copyViewId: copyViewId?.trim(),
+          sequenceViewId: sequenceViewId?.trim(),
+          description,
+        });
+        return {
+          content: [{ type: "text" as const, text: `View created.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to create view: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "rename_view",
+    {
+      description: "Rename (or update description of) a view. Use list_views for view IDs.",
+      inputSchema: {
+        stackId: z.string(),
+        tableId: z.string(),
+        viewId: z.string().describe("View ID (from list_views)"),
+        name: z.string().describe("New view name"),
+        description: z.string().optional(),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, viewId, name, description } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const vId = viewId?.trim();
+      const vName = name?.trim();
+      if (!sId || !tId || !vId || !vName) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, tableId, viewId, and name are required." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set." }],
+        };
+      }
+      try {
+        const result = await renameView(sId, tId, vId, { name: vName, description });
+        return {
+          content: [{ type: "text" as const, text: `View updated.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to rename view: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "delete_view",
+    {
+      description: "Delete a view from a table (soft-delete). Use list_views for view IDs.",
+      inputSchema: {
+        stackId: z.string(),
+        tableId: z.string(),
+        viewId: z.string().describe("View ID to delete"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, viewId } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const vId = viewId?.trim();
+      if (!sId || !tId || !vId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, tableId, and viewId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasApiKey()) {
+        return {
+          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set." }],
+        };
+      }
+      try {
+        const result = await deleteView(sId, tId, vId);
+        return {
+          content: [{ type: "text" as const, text: `View deleted.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to delete view: ${message}` }],
           isError: true,
         };
       }
