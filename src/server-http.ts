@@ -1,6 +1,6 @@
 /**
  * Stackby MCP Server — HTTP entry point for hosted mode (e.g. ChatGPT, ALB).
- * Per-request API key via X-Stackby-API-Key or Authorization: Bearer <key>.
+ * Per-request auth via X-Stackby-API-Key or Authorization: Bearer <token>.
  * GET /health for ALB health checks; POST /mcp and GET /mcp for MCP.
  */
 import * as http from "node:http";
@@ -25,6 +25,10 @@ function normalizePath(raw: string): string {
 function getApiKeyFromRequest(req: http.IncomingMessage): string | undefined {
   const header = req.headers["x-stackby-api-key"];
   if (typeof header === "string" && header.trim()) return header.trim();
+  return undefined;
+}
+
+function getBearerTokenFromRequest(req: http.IncomingMessage): string | undefined {
   const auth = req.headers.authorization;
   if (typeof auth === "string" && auth.startsWith("Bearer ")) return auth.slice(7).trim();
   return undefined;
@@ -86,10 +90,11 @@ async function main(): Promise<void> {
 
     if (path === MCP_PATH && (req.method === "POST" || req.method === "GET")) {
       const apiKey = getApiKeyFromRequest(req);
+      const bearerToken = getBearerTokenFromRequest(req);
       const apiUrl = getApiUrlFromRequest(req);
-      if (!apiKey) {
+      if (!apiKey && !bearerToken) {
         res.writeHead(401, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ error: "Missing API key. Send X-Stackby-API-Key or Authorization: Bearer <key>." }));
+        res.end(JSON.stringify({ error: "Missing auth credential. Send X-Stackby-API-Key or Authorization: Bearer <token>." }));
         return;
       }
       try {
@@ -123,7 +128,7 @@ async function main(): Promise<void> {
         });
         await mcpServer.connect(transport);
         // Pass parsedBody explicitly so the SDK uses it and does not read from req (stream already consumed).
-        await runWithRequestContext({ apiKey, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
+        await runWithRequestContext({ apiKey, bearerToken, apiUrl }, () => transport.handleRequest(req, res, parsedBody));
       } catch (err) {
         const payload = serializeError(err);
         const message = (payload.message as string) ?? String(err);

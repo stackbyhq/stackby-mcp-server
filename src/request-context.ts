@@ -6,7 +6,8 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 export interface RequestContext {
-  apiKey: string;
+  apiKey?: string;
+  bearerToken?: string;
   apiUrl?: string;
 }
 
@@ -23,6 +24,11 @@ export function runWithRequestContext<T>(context: RequestContext, fn: () => T): 
 export function getApiKeyFromContext(): string | undefined {
   const ctx = getRequestContext();
   return ctx?.apiKey?.trim() || undefined;
+}
+
+export function getBearerTokenFromContext(): string | undefined {
+  const ctx = getRequestContext();
+  return ctx?.bearerToken?.trim() || undefined;
 }
 
 export function getApiUrlFromContext(): string | undefined {

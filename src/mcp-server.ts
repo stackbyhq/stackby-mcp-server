@@ -4,7 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  hasApiKey,
+  hasAuthCredential,
   getApiBaseUrl,
   getWorkspaces,
   getAllStacks,
@@ -113,12 +113,12 @@ export function createStackbyMcpServer(): McpServer {
       inputSchema: {},
     },
     withCamel(async () => {
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
           content: [
             {
               type: "text" as const,
-              text: "STACKBY_API_KEY is not set. Add it to your MCP config (e.g. in Cursor: .cursor/mcp.json → env.STACKBY_API_KEY) with your Stackby API key or Personal Access Token (PAT).",
+              text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode.",
             },
           ],
         };
@@ -162,12 +162,12 @@ export function createStackbyMcpServer(): McpServer {
     withCamel(async (input) => {
       const { workspaceId } = input;
       const wsId = workspaceId?.trim();
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
           content: [
             {
               type: "text" as const,
-              text: "STACKBY_API_KEY is not set. Add it to your MCP config (e.g. in Cursor: .cursor/mcp.json → env.STACKBY_API_KEY) with your Stackby API key or Personal Access Token (PAT).",
+              text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode.",
             },
           ],
         };
@@ -242,9 +242,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -311,9 +311,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -367,9 +367,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -418,9 +418,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -459,9 +459,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -496,9 +496,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -548,9 +548,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -614,9 +614,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -675,9 +675,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -725,9 +725,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -773,9 +773,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
@@ -838,9 +838,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -886,9 +886,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -930,9 +930,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -982,9 +982,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       const isLinkType = /^link$/i.test(type);
@@ -1058,9 +1058,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -1103,9 +1103,9 @@ export function createStackbyMcpServer(): McpServer {
           isError: true,
         };
       }
-      if (!hasApiKey()) {
+      if (!hasAuthCredential()) {
         return {
-          content: [{ type: "text" as const, text: "STACKBY_API_KEY is not set. Add it to your MCP config." }],
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
       try {
@@ -1124,3 +1124,6 @@ export function createStackbyMcpServer(): McpServer {
 
   return mcpServer;
 }
+
+
+

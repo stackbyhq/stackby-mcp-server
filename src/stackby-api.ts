@@ -3,16 +3,23 @@
  * Uses dedicated MCP API only: /api/v1/mcp/* (existing developer API is unchanged).
  * In HTTP (hosted) mode, API key and URL come from request context; in stdio mode from process.env.
  */
-import { getApiKeyFromContext, getApiUrlFromContext } from "./request-context.js";
+import { getApiKeyFromContext, getApiUrlFromContext, getBearerTokenFromContext } from "./request-context.js";
 
 const DEFAULT_BASE_URL = process.env.STACKBY_API_URL || "https://stackby.com";
 const ENV_API_KEY = process.env.STACKBY_API_KEY || "";
+const ENV_BEARER_TOKEN = process.env.STACKBY_BEARER_TOKEN || "";
 const MCP_API = "/api/v1/mcp";
 
 function getEffectiveApiKey(): string {
   const fromContext = getApiKeyFromContext();
   if (fromContext) return fromContext;
   return ENV_API_KEY.trim();
+}
+
+function getEffectiveBearerToken(): string {
+  const fromContext = getBearerTokenFromContext();
+  if (fromContext) return fromContext;
+  return ENV_BEARER_TOKEN.trim();
 }
 
 function getEffectiveBaseUrl(): string {
@@ -25,15 +32,33 @@ export function hasApiKey(): boolean {
   return Boolean(getEffectiveApiKey());
 }
 
+export function hasAuthCredential(): boolean {
+  return Boolean(getEffectiveApiKey() || getEffectiveBearerToken());
+}
+
+function getAuthMode(): "bearer" | "api_key" | "none" {
+  if (getEffectiveBearerToken()) return "bearer";
+  if (getEffectiveApiKey()) return "api_key";
+  return "none";
+}
+
 /** Returns the base URL actually in use (for error messages). */
 export function getApiBaseUrl(): string {
   return getEffectiveBaseUrl();
 }
 
 function authHeaders(): HeadersInit {
+  const bearerToken = getEffectiveBearerToken();
+  if (bearerToken) {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${bearerToken}`,
+    };
+  }
+
   const key = getEffectiveApiKey();
   if (!key) {
-    throw new Error("STACKBY_API_KEY is not set. Set it in your MCP config (e.g. Cursor mcp.json env) or send header X-Stackby-API-Key (hosted).");
+    throw new Error("No auth credential set. Provide STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send X-Stackby-API-Key / Authorization: Bearer <token> (hosted).");
   }
   return {
     "Content-Type": "application/json",
@@ -63,6 +88,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<{ da
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = body?.error ?? body?.message ?? res.statusText;
+    console.error("[Stackby MCP API] Request failed", {
+      method: options.method ?? "GET",
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      authMode: getAuthMode(),
+      responseError: body?.error,
+      responseMessage: body?.message,
+      responseBody: body,
+    });
     throw new Error(`Stackby API ${res.status}: ${msg}`);
   }
   return normalizeResponse<T>(body);
@@ -426,6 +461,16 @@ export async function createStack(
   };
   if (!res.ok) {
     const msg = full?.error ?? full?.message ?? res.statusText;
+    console.error("[Stackby MCP API] Request failed", {
+      method: "POST",
+      url,
+      status: res.status,
+      statusText: res.statusText,
+      authMode: getAuthMode(),
+      responseError: full?.error,
+      responseMessage: full?.message,
+      responseBody: full,
+    });
     throw new Error(`Stackby API ${res.status}: ${msg}`);
   }
   const data = full.data;
