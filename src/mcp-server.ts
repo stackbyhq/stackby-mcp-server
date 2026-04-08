@@ -249,11 +249,31 @@ export function createStackbyMcpServer(): McpServer {
       }
       try {
         const tpl = Array.isArray(tables) ? tables : [];
-        const { stack, template } = await createStack(wsId, stackName, {
-          color: color?.trim() || undefined,
-          icon: icon?.trim() || undefined,
-          tables: tpl.length > 0 ? tpl : undefined,
-        });
+        let stack: any;
+        let template: any;
+        let usedFallback = false;
+        let fallbackReason = "";
+
+        try {
+          const created = await createStack(wsId, stackName, {
+            color: color?.trim() || undefined,
+            icon: icon?.trim() || undefined,
+            tables: tpl.length > 0 ? tpl : undefined,
+          });
+          stack = created.stack;
+          template = created.template;
+        } catch (err) {
+          if (tpl.length === 0) throw err;
+          usedFallback = true;
+          fallbackReason = err instanceof Error ? err.message : String(err);
+          const created = await createStack(wsId, stackName, {
+            color: color?.trim() || undefined,
+            icon: icon?.trim() || undefined,
+          });
+          stack = created.stack;
+          template = created.template;
+        }
+
         const id = stack?.stackId ?? (stack as any)?.id ?? "unknown";
         const returnedName = stack?.stackName ?? stackName;
         const lines = [
@@ -261,6 +281,9 @@ export function createStackbyMcpServer(): McpServer {
           `Stack ID: ${id}`,
           `Workspace: ${wsId}`,
         ];
+        if (usedFallback) {
+          lines.push("", `Server-side template apply failed, used client-side fallback: ${fallbackReason}`);
+        }
         if (tpl.length > 0 && !template) {
           const applied = await applyStackTemplate(id, tpl as TemplateTableInput[]);
           if (applied.tableSummaries.length > 0) {
@@ -760,13 +783,28 @@ export function createStackbyMcpServer(): McpServer {
       inputSchema: {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
         tableId: z.string().describe("Table ID (from list_tables)"),
-        fields: z.record(z.string(), z.unknown()).describe("Field values keyed by column name (e.g. { \"Name\": \"Task 1\", \"Status\": \"Done\" })"),
+        fields: z
+          .union([z.record(z.string(), z.unknown()), z.string()])
+          .describe("Field values keyed by column name (object) or JSON string object."),
       },
     },
     withCamel(async (input) => {
       const { stackId, tableId, fields } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
+      let parsedFields: Record<string, unknown> | undefined;
+      if (fields && typeof fields === "object" && !Array.isArray(fields)) {
+        parsedFields = fields as Record<string, unknown>;
+      } else if (typeof fields === "string" && fields.trim()) {
+        try {
+          const raw = JSON.parse(fields);
+          if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+            parsedFields = raw as Record<string, unknown>;
+          }
+        } catch {
+          parsedFields = undefined;
+        }
+      }
       if (!sId || !tId) {
         return {
           content: [{ type: "text" as const, text: "stackId and tableId are required." }],
@@ -778,14 +816,14 @@ export function createStackbyMcpServer(): McpServer {
           content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
-      if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+      if (!parsedFields) {
         return {
-          content: [{ type: "text" as const, text: "fields must be an object of column names to values." }],
+          content: [{ type: "text" as const, text: "fields must be an object (or JSON string object) of column names to values." }],
           isError: true,
         };
       }
       try {
-        const records = await createRow(sId, tId, fields as Record<string, unknown>);
+        const records = await createRow(sId, tId, parsedFields);
         const created = records[0];
         if (!created) {
           return {
@@ -964,7 +1002,10 @@ export function createStackbyMcpServer(): McpServer {
         name: z.string().describe("Column name"),
         columnType: z.string().describe("Column type: shortText, longText, number, checkbox, dateAndTime, singleOption, multipleOptions, email, url, link, formula, etc."),
         viewId: z.string().optional().describe("View ID (optional; first view used if omitted)"),
-        options: z.array(z.string()).optional().describe("For singleOption/multipleOptions: choice labels"),
+        options: z
+          .union([z.array(z.string()), z.string()])
+          .optional()
+          .describe("For singleOption/multipleOptions: choice labels. Accepts array or JSON string array."),
         linkToTableId: z.string().optional().describe("For link columns: Table ID to connect to (required when columnType is link). Use list_tables to get table IDs."),
         linkToTableViewId: z.string().optional().describe("For link columns: View ID of the target table (optional; first view used if omitted)"),
         formulaText: z.string().optional().describe("For formula columns: the formula expression (e.g. {Amount} * {Quantity} or CREATED_TIME). Use column names in braces."),
@@ -976,6 +1017,27 @@ export function createStackbyMcpServer(): McpServer {
       const tId = tableId?.trim();
       const colName = name?.trim();
       const type = columnType?.trim();
+      let parsedOptions: string[] | undefined;
+      if (Array.isArray(options)) {
+        parsedOptions = options.filter((o): o is string => typeof o === "string");
+      } else if (typeof options === "string" && options.trim()) {
+        try {
+          const raw = JSON.parse(options);
+          if (Array.isArray(raw)) {
+            parsedOptions = raw.filter((o): o is string => typeof o === "string");
+          } else {
+            parsedOptions = options
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean);
+          }
+        } catch {
+          parsedOptions = options
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+        }
+      }
       if (!sId || !tId || !colName || !type) {
         return {
           content: [{ type: "text" as const, text: "stackId, tableId, name, and columnType are required." }],
@@ -1010,7 +1072,7 @@ export function createStackbyMcpServer(): McpServer {
         }
         const result = await createColumn(sId, tId, colName, type, {
           viewId: viewIdToUse,
-          options: options && options.length > 0 ? options : undefined,
+          options: parsedOptions && parsedOptions.length > 0 ? parsedOptions : undefined,
           linkToTableId: isLinkType ? linkToTableId?.trim() : undefined,
           linkToTableViewId: isLinkType ? linkToViewId : undefined,
           formulaText: formulaText?.trim() || undefined,
