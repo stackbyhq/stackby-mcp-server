@@ -294,10 +294,10 @@ export function createStackbyMcpServer(): McpServer {
           }
         } else {
           if (template?.tableSummaries?.length) {
-            lines.push("", "Template applied:", ...template.tableSummaries.map((s) => `  ${s}`));
+            lines.push("", "Template applied:", ...template.tableSummaries.map((s: string) => `  ${s}`));
           }
           if (template?.warnings?.length) {
-            lines.push("", "Template warnings:", ...template.warnings.map((w) => `  - ${w}`));
+            lines.push("", "Template warnings:", ...template.warnings.map((w: string) => `  - ${w}`));
           }
         }
         return {
