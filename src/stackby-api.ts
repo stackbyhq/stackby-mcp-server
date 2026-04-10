@@ -560,6 +560,7 @@ export const COLUMN_TYPES = [
 	"apiDataDate",
 	"apiDataDuration",
 	"ai",
+  "multipleAttachment",
 ] as const;
 
 export type ColumnType = (typeof COLUMN_TYPES)[number];
@@ -597,6 +598,12 @@ COLUMN_TYPE_ALIASES["auto number"] = "autoNumber";
 COLUMN_TYPE_ALIASES["multiline text"] = "longText";
 COLUMN_TYPE_ALIASES["rollup"] = "aggregation";
 COLUMN_TYPE_ALIASES["roll up"] = "aggregation";
+COLUMN_TYPE_ALIASES["multipleAttachment"] = "multipleAttachment";
+COLUMN_TYPE_ALIASES["multiple_attachment"] = "multipleAttachment";
+COLUMN_TYPE_ALIASES["multiple attachment"] = "multipleAttachment";
+COLUMN_TYPE_ALIASES["multiple-attachment"] = "multipleAttachment";
+COLUMN_TYPE_ALIASES["multiple_attachment"] = "multipleAttachment";
+COLUMN_TYPE_ALIASES["multiple-Attachment"] = "multipleAttachment";
 
 export function normalizeColumnType(input: string): string {
   const trimmed = input?.trim() ?? "";

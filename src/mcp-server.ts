@@ -305,6 +305,7 @@ export function createStackbyMcpServer(): McpServer {
         };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        console.log("::: stack create failed :", err)
         return {
           content: [
             { type: "text" as const, text: `Failed to create stack: ${message}. Check workspaceId, stack name, and plan limits.` },
