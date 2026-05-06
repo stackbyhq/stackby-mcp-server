@@ -552,6 +552,27 @@ export async function createTable(
   return out.data ?? {};
 }
 
+/** PATCH /api/v1/mcp/stacks/:stackId/tables/:tableId — update table name and/or description. */
+export async function updateTable(
+  stackId: string,
+  tableId: string,
+  body: { name?: string; description?: string }
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}`;
+  const out = await request<unknown>(path, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return out.data;
+}
+
+/** DELETE /api/v1/mcp/stacks/:stackId/tables/:tableId — delete a table. */
+export async function deleteTable(stackId: string, tableId: string): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}`;
+  const out = await request<unknown>(path, { method: "DELETE" });
+  return out.data;
+}
+
 /** Column types supported by POST /api/v1/columnCreate/:columnType (devapi). */
 export const COLUMN_TYPES = [
 	"shortText",
@@ -775,6 +796,47 @@ export async function createColumn(
     body: JSON.stringify(body),
   });
   return out.data ?? {};
+}
+
+/** PATCH /api/v1/mcp/stacks/:stackId/tables/:tableId/columns/:columnId — update a field. */
+export async function updateColumn(
+  stackId: string,
+  tableId: string,
+  columnId: string,
+  body: Record<string, unknown>
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/columns/${encodeURIComponent(columnId)}`;
+  const out = await request<unknown>(path, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return out.data;
+}
+
+/** DELETE /api/v1/mcp/stacks/:stackId/tables/:tableId/columns/:columnId — delete a field. */
+export async function deleteColumn(
+  stackId: string,
+  tableId: string,
+  columnId: string
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/columns/${encodeURIComponent(columnId)}`;
+  const out = await request<unknown>(path, { method: "DELETE" });
+  return out.data;
+}
+
+/** POST /api/v1/mcp/stacks/:stackId/tables/:tableId/rows/:recordId/comments — create a record comment. */
+export async function createRecordComment(
+  stackId: string,
+  tableId: string,
+  recordId: string,
+  body: { text: string; attachment?: unknown; cellValue?: unknown }
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/tables/${encodeURIComponent(tableId)}/rows/${encodeURIComponent(recordId)}/comments`;
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return out.data;
 }
 
 /**

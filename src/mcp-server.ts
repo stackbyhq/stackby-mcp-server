@@ -22,7 +22,12 @@ import {
   updateRows,
   deleteRows,
   createTable,
+  updateTable,
+  deleteTable,
   createColumn,
+  updateColumn,
+  deleteColumn,
+  createRecordComment,
   createStack,
   getAutomations,
   createAutomation,
@@ -1233,6 +1238,95 @@ export function createStackbyMcpServer(): McpServer {
   );
 
   mcpServer.registerTool(
+    "update_table",
+    {
+      description: "Update a table's name and/or description.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+        name: z.string().optional().describe("New table name"),
+        description: z.string().optional().describe("New table description"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, name, description } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const body: Record<string, unknown> = {};
+      if (typeof name === "string" && name.trim()) body.name = name.trim();
+      if (typeof description === "string") body.description = description;
+      if (!sId || !tId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and tableId are required." }],
+          isError: true,
+        };
+      }
+      if (Object.keys(body).length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "Provide at least one of: name, description." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const result = await updateTable(sId, tId, body);
+        return {
+          content: [{ type: "text" as const, text: `Table updated.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to update table: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "delete_table",
+    {
+      description: "Delete a table from a stack.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      if (!sId || !tId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and tableId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const result = await deleteTable(sId, tId);
+        return {
+          content: [{ type: "text" as const, text: `Table deleted.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to delete table: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
     "create_field",
     {
       description: "Create a new column (field) in a table. Use describe_table to see existing columns. For singleOption/multipleOptions pass options array. For link columns, provide linkToTableId. For formula columns, pass formulaText (e.g. {Amount} * {Quantity}).",
@@ -1335,6 +1429,155 @@ export function createStackbyMcpServer(): McpServer {
     );
 
   mcpServer.registerTool(
+    "update_field",
+    {
+      description:
+        "Update a field (column). Use `name` to rename, `description` to set field description, or include `type` plus related config fields to update field configuration.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+        columnId: z.string().describe("Column ID (from describe_table)"),
+        name: z.string().optional().describe("New field name"),
+        description: z.string().optional().describe("New field description"),
+        type: z.string().optional().describe("Field type when updating field config"),
+        body: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Optional raw PATCH body for advanced field updates. Merged with top-level inputs."),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, columnId, name, description, type, body } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const cId = columnId?.trim();
+      const payload: Record<string, unknown> = { ...((body as Record<string, unknown>) ?? {}) };
+      if (typeof name === "string" && name.trim()) payload.name = name.trim();
+      if (typeof description === "string") payload.description = description;
+      if (typeof type === "string" && type.trim()) payload.type = type.trim();
+      if (!sId || !tId || !cId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, tableId, and columnId are required." }],
+          isError: true,
+        };
+      }
+      if (Object.keys(payload).length === 0) {
+        return {
+          content: [{ type: "text" as const, text: "Provide at least one field update: name, description, type, or body." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const result = await updateColumn(sId, tId, cId, payload);
+        return {
+          content: [{ type: "text" as const, text: `Field updated.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to update field: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "delete_field",
+    {
+      description: "Delete a field (column) from a table.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+        columnId: z.string().describe("Column ID (from describe_table)"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, columnId } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const cId = columnId?.trim();
+      if (!sId || !tId || !cId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, tableId, and columnId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const result = await deleteColumn(sId, tId, cId);
+        return {
+          content: [{ type: "text" as const, text: `Field deleted.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to delete field: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "create_record_comment",
+    {
+      description: "Add a comment to a record (row).",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+        recordId: z.string().describe("Record (row) ID"),
+        text: z.string().describe("Comment text"),
+        attachment: z.unknown().optional().describe("Optional attachment payload"),
+        cellValue: z.unknown().optional().describe("Optional cellValue payload"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, recordId, text, attachment, cellValue } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      const rId = recordId?.trim();
+      const commentText = text?.trim();
+      if (!sId || !tId || !rId || !commentText) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, tableId, recordId, and text are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const result = await createRecordComment(sId, tId, rId, {
+          text: commentText,
+          attachment,
+          cellValue,
+        });
+        return {
+          content: [{ type: "text" as const, text: `Comment created.\n${JSON.stringify(result, null, 2)}` }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to create record comment: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
     "list_automation_capabilities",
     {
       description:
@@ -1388,6 +1631,63 @@ export function createStackbyMcpServer(): McpServer {
       return {
         content: [{ type: "text" as const, text: lines.join("\n") }],
       };
+    })
+  );
+
+  mcpServer.registerTool(
+    "update_records_for_table",
+    {
+      description: "Update existing rows for a table. Alias of update_records. Provide an array of { id, fields }. At most 10 records per request.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID (from list_stacks)"),
+        tableId: z.string().describe("Table ID (from list_tables)"),
+        records: z
+          .array(
+            z.object({
+              id: z.string().describe("Record (row) ID"),
+              fields: z.record(z.string(), z.unknown()).describe("Field values to set (column name -> value)"),
+            })
+          )
+          .min(1)
+          .max(10)
+          .describe("Records to update"),
+      },
+    },
+    withCamel(async (input) => {
+      const { stackId, tableId, records } = input;
+      const sId = stackId?.trim();
+      const tId = tableId?.trim();
+      if (!sId || !tId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and tableId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const updated = await updateRows(
+          sId,
+          tId,
+          records.map((r: any) => ({ id: r.id, fields: r.fields as Record<string, unknown> }))
+        );
+        const lines = updated.map((r) => `- ${r.id}: ${JSON.stringify(r.field)}`);
+        const text = [`Updated ${updated.length} record(s) for table ${tId}:`, "", ...lines].join("\n");
+        return {
+          content: [{ type: "text" as const, text }],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [
+            { type: "text" as const, text: `Failed to update records for table: ${message}. Check stackId, tableId, record IDs, and field names.` },
+          ],
+          isError: true,
+        };
+      }
     })
   );
 

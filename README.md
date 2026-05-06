@@ -69,7 +69,7 @@ Alternatively use `"Authorization": "Bearer your-api-key-or-pat"` instead of `X-
 
 ---
 
-## Tools (21)
+## Tools (27)
 
 | Tool | Description |
 |------|-------------|
@@ -82,8 +82,14 @@ Alternatively use `"Authorization": "Bearer your-api-key-or-pat"` instead of `X-
 | `create_record` | Create a row (fields keyed by column name). |
 | `update_records` | Update rows (array of `{ id, fields }`, max 10). |
 | `delete_records` | Soft-delete rows by ID (max 10). |
+| `update_records_for_table` | Update rows for a specific table (alias of update_records). |
 | `create_table` | Create a new table in a stack. |
+| `update_table` | Update a table name and/or description. |
+| `delete_table` | Delete a table from a stack. |
 | `create_field` | Create a new column (field) in a table. |
+| `update_field` | Update a field name, description, or config. |
+| `delete_field` | Delete a field from a table. |
+| `create_record_comment` | Add a comment to a record. |
 | `list_automation_capabilities` | Show supported automation trigger/action types and advanced automation endpoint actions. |
 | `list_automations` | List automations in a stack. |
 | `get_automation` | Get full details for one automation. |
