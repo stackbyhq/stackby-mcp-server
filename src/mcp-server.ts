@@ -285,6 +285,11 @@ export function createStackbyMcpServer(): McpServer {
           lines.push("", `Server-side template apply failed, used client-side fallback: ${fallbackReason}`);
         }
         if (tpl.length > 0 && !template) {
+          if (!id || id === "unknown") {
+            throw new Error(
+              "Stack was created but the API response did not include a stackId, so the template could not be applied client-side."
+            );
+          }
           const applied = await applyStackTemplate(id, tpl as TemplateTableInput[]);
           if (applied.tableSummaries.length > 0) {
             lines.push("", "Template applied (client):", ...applied.tableSummaries.map((s) => `  ${s}`));

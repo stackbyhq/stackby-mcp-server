@@ -431,6 +431,49 @@ export interface CreateStackWithTemplateResult {
   template?: CreateStackTemplateMeta;
 }
 
+function normalizeCreateStackResponse(body: unknown): {
+  stack: CreateStackResult;
+  template?: CreateStackTemplateMeta;
+  error?: string;
+  message?: string;
+} {
+  if (!body || typeof body !== "object") {
+    return { stack: {} };
+  }
+
+  const obj = body as Record<string, unknown>;
+  const template = obj.template as CreateStackTemplateMeta | undefined;
+  const error = typeof obj.error === "string" ? obj.error : undefined;
+  const message = typeof obj.message === "string" ? obj.message : undefined;
+
+  if (obj.data !== undefined) {
+    const data = obj.data as CreateStackResult | CreateStackResult[];
+    return {
+      stack: Array.isArray(data) ? data[0] ?? {} : data ?? {},
+      template,
+      error,
+      message,
+    };
+  }
+
+  if (obj.stack && typeof obj.stack === "object") {
+    return {
+      stack: obj.stack as CreateStackResult,
+      template,
+      error,
+      message,
+    };
+  }
+
+  const { template: _template, error: _error, message: _message, ...stack } = obj;
+  return {
+    stack: stack as CreateStackResult,
+    template,
+    error,
+    message,
+  };
+}
+
 /** POST /api/v1/mcp/stacks/create — create a new stack (base) in a workspace. Optional `tables` are applied on the server. */
 export async function createStack(
   workspaceId: string,
@@ -453,12 +496,7 @@ export async function createStack(
     headers: { ...authHeaders() },
     body: JSON.stringify(body),
   });
-  const full = (await res.json().catch(() => ({}))) as {
-    data?: CreateStackResult | CreateStackResult[];
-    template?: CreateStackTemplateMeta;
-    error?: string;
-    message?: string;
-  };
+  const full = normalizeCreateStackResponse(await res.json().catch(() => ({})));
   if (!res.ok) {
     const msg = full?.error ?? full?.message ?? res.statusText;
     console.error("[Stackby MCP API] Request failed", {
@@ -473,10 +511,8 @@ export async function createStack(
     });
     throw new Error(`Stackby API ${res.status}: ${msg}`);
   }
-  const data = full.data;
-  const stack = Array.isArray(data) ? data[0] ?? {} : data ?? {};
   return {
-    stack,
+    stack: full.stack ?? {},
     template: full.template,
   };
 }
