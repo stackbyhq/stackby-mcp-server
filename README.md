@@ -69,7 +69,7 @@ Alternatively use `"Authorization": "Bearer your-api-key-or-pat"` instead of `X-
 
 ---
 
-## Tools (11)
+## Tools (21)
 
 | Tool | Description |
 |------|-------------|
@@ -84,6 +84,17 @@ Alternatively use `"Authorization": "Bearer your-api-key-or-pat"` instead of `X-
 | `delete_records` | Soft-delete rows by ID (max 10). |
 | `create_table` | Create a new table in a stack. |
 | `create_field` | Create a new column (field) in a table. |
+| `list_automation_capabilities` | Show supported automation trigger/action types and advanced automation endpoint actions. |
+| `list_automations` | List automations in a stack. |
+| `get_automation` | Get full details for one automation. |
+| `create_automation` | Create an automation with trigger and optional actions in one call. |
+| `update_automation` | Update automation metadata. |
+| `delete_automation` | Delete an automation workflow. |
+| `add_automation_trigger` | Add a trigger to an existing automation. |
+| `add_automation_action` | Add an action step to an existing automation. |
+| `automation_workflow_action` | Advanced passthrough for workflow-level automation actions. |
+| `automation_trigger_action` | Advanced passthrough for trigger-level automation operations. |
+| `automation_action_action` | Advanced passthrough for action-step operations. |
 
 ---
 

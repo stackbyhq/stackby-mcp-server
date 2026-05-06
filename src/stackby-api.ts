@@ -816,3 +816,117 @@ export async function mcpBlockAction(
   });
   return out.data;
 }
+
+export interface AutomationTriggerInput {
+  triggerType: string;
+  triggerParams?: unknown;
+  tableId?: string;
+  description?: string;
+}
+
+export interface AutomationActionInput {
+  actionType: string;
+  actionParams?: unknown;
+  sequence?: number;
+  description?: string;
+}
+
+export interface CreateAutomationInput {
+  name: string;
+  description?: string;
+  isTurnedOn?: boolean;
+  tableId?: string;
+  viewId?: string;
+  trigger: AutomationTriggerInput;
+  actions?: AutomationActionInput[];
+}
+
+/** GET /api/v1/mcp/stacks/:stackId/automations â€” list automations in a stack. */
+export async function getAutomations(stackId: string): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automations`;
+  const out = await request<unknown>(path, { method: "GET" });
+  return out.data;
+}
+
+/** POST /api/v1/mcp/stacks/:stackId/automations â€” create automation with trigger and optional actions. */
+export async function createAutomation(stackId: string, body: CreateAutomationInput): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automations`;
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return out.data;
+}
+
+/** GET /api/v1/mcp/stacks/:stackId/automations/:automationId â€” get automation details. */
+export async function getAutomation(stackId: string, automationId: string): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automations/${encodeURIComponent(automationId)}`;
+  const out = await request<unknown>(path, { method: "GET" });
+  return out.data;
+}
+
+/** PATCH /api/v1/mcp/stacks/:stackId/automations/:automationId â€” update automation metadata. */
+export async function updateAutomation(
+  stackId: string,
+  automationId: string,
+  body: Record<string, unknown>
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automations/${encodeURIComponent(automationId)}`;
+  const out = await request<unknown>(path, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return out.data;
+}
+
+/** DELETE /api/v1/mcp/stacks/:stackId/automations/:automationId â€” delete an automation. */
+export async function deleteAutomation(stackId: string, automationId: string): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automations/${encodeURIComponent(automationId)}`;
+  const out = await request<unknown>(path, { method: "DELETE" });
+  return out.data;
+}
+
+/** POST /api/v1/mcp/stacks/:stackId/automation-workflows/:action â€” advanced automation workflow actions. */
+export async function mcpAutomationWorkflowAction(
+  stackId: string,
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automation-workflows/${encodeURIComponent(action)}`;
+  const payload = { ...body, stackId: (body.stackId as string | undefined) ?? stackId };
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return out.data;
+}
+
+/** POST /api/v1/mcp/stacks/:stackId/automation-triggers/:action â€” advanced trigger actions. */
+export async function mcpAutomationTriggerAction(
+  stackId: string,
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automation-triggers/${encodeURIComponent(action)}`;
+  const payload = { ...body, stackId: (body.stackId as string | undefined) ?? stackId };
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return out.data;
+}
+
+/** POST /api/v1/mcp/stacks/:stackId/automation-actions/:action â€” advanced action-step actions. */
+export async function mcpAutomationActionAction(
+  stackId: string,
+  action: string,
+  body: Record<string, unknown> = {}
+): Promise<unknown> {
+  const path = `${MCP_API}/stacks/${encodeURIComponent(stackId)}/automation-actions/${encodeURIComponent(action)}`;
+  const payload = { ...body, stackId: (body.stackId as string | undefined) ?? stackId };
+  const out = await request<unknown>(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return out.data;
+}

@@ -24,6 +24,14 @@ import {
   createTable,
   createColumn,
   createStack,
+  getAutomations,
+  createAutomation,
+  getAutomation,
+  updateAutomation,
+  deleteAutomation,
+  mcpAutomationWorkflowAction,
+  mcpAutomationTriggerAction,
+  mcpAutomationActionAction,
   mcpDashboardAction,
   mcpBlockAction,
 } from "./stackby-api.js";
@@ -78,6 +86,103 @@ const templateTableSchema = z.object({
   columns: z.array(templateColumnSchema).optional(),
   rows: z.array(templateRowSchema).optional(),
 });
+
+const AUTOMATION_TRIGGER_CATALOG = [
+  {
+    code: "T_CR_ROW",
+    name: "When record created",
+    description: "Runs when a new row is created in a table.",
+    typicalParams: { example: "Usually no extra params beyond tableId." },
+  },
+  {
+    code: "T_UP_ROW",
+    name: "When record updated",
+    description: "Runs when a row is updated.",
+    typicalParams: { example: "May include watched fields or update conditions." },
+  },
+  {
+    code: "SD_TIME",
+    name: "At scheduled time",
+    description: "Runs on a schedule or date/time-based cadence.",
+    typicalParams: { example: "Schedule/date/time configuration in triggerParams." },
+  },
+  {
+    code: "WH_RECV",
+    name: "Webhook received",
+    description: "Runs when an incoming webhook hits the automation.",
+    typicalParams: { example: "Webhook configuration in triggerParams." },
+  },
+  {
+    code: "RW_COND",
+    name: "Row matches conditions",
+    description: "Runs when a row enters matching conditions.",
+    typicalParams: { example: "Condition/filter definition in triggerParams." },
+  },
+  {
+    code: "VM_ROW",
+    name: "View match / row event",
+    description: "Row/view-driven trigger used by the automation system.",
+    typicalParams: { example: "View or row matching settings in triggerParams." },
+  },
+] as const;
+
+const AUTOMATION_ACTION_CATALOG = [
+  {
+    code: "CR_ROW",
+    name: "Create record",
+    description: "Create a new row in a target table.",
+  },
+  {
+    code: "UP_ROW",
+    name: "Update record",
+    description: "Update an existing row in a target table.",
+  },
+  {
+    code: "FIND_ROW",
+    name: "Find record",
+    description: "Look up rows to use in later automation steps.",
+  },
+  {
+    code: "S_EMAIL",
+    name: "Send email",
+    description: "Send an email from Stackby automation.",
+  },
+  {
+    code: "WHATSAPP",
+    name: "Send WhatsApp",
+    description: "Send a WhatsApp message.",
+  },
+  {
+    code: "GMAIL",
+    name: "Send Gmail",
+    description: "Send an email using Gmail integration.",
+  },
+  {
+    code: "OUTLOOK",
+    name: "Send Outlook email",
+    description: "Send an email using Outlook integration.",
+  },
+  {
+    code: "MS_TEAM",
+    name: "Send to Microsoft Teams",
+    description: "Post or notify via Microsoft Teams.",
+  },
+  {
+    code: "SLACK",
+    name: "Send Slack message",
+    description: "Post a message to Slack.",
+  },
+  {
+    code: "SORT",
+    name: "Sort records",
+    description: "Run a sort-related automation step.",
+  },
+  {
+    code: "AI_GEN",
+    name: "AI generate",
+    description: "Generate content with an AI-powered automation step.",
+  },
+] as const;
 
 export function createStackbyMcpServer(): McpServer {
   const mcpServer = new McpServer({
@@ -1100,6 +1205,492 @@ export function createStackbyMcpServer(): McpServer {
       }
     })
     );
+
+  mcpServer.registerTool(
+    "list_automation_capabilities",
+    {
+      description:
+        "List the automation trigger types, action types, and advanced workflow actions supported by Stackby MCP. Use this first so the AI can choose the right automation setup.",
+      inputSchema: {},
+    },
+    withCamel(async () => {
+      const workflowActions = [
+        "create",
+        "update",
+        "delete",
+        "details",
+        "updateSequence",
+        "duplicate",
+        "runCount",
+        "sectioncreate",
+        "sectionrename",
+        "sectiondelete",
+        "addtosection",
+        "sectionmove",
+        "sectionexpand",
+        "updateDescription",
+      ];
+      const triggerActions = ["create", "update", "delete", "list", "trigger"];
+      const actionActions = ["create", "update", "delete", "list", "action", "updateSequence", "duplicate", "updateDescription"];
+      const lines = [
+        "Automation trigger types:",
+        ...AUTOMATION_TRIGGER_CATALOG.map((item) => `- ${item.code}: ${item.name} — ${item.description}`),
+        "",
+        "Automation action types:",
+        ...AUTOMATION_ACTION_CATALOG.map((item) => `- ${item.code}: ${item.name} — ${item.description}`),
+        "",
+        `Advanced workflow endpoint actions: ${workflowActions.join(", ")}`,
+        `Advanced trigger endpoint actions: ${triggerActions.join(", ")}`,
+        `Advanced action endpoint actions: ${actionActions.join(", ")}`,
+        "",
+        "Notes:",
+        "- `create_automation` is the easiest path: it creates the workflow, first trigger, and optional actions in one call.",
+        "- Use `add_automation_trigger` or `add_automation_action` when building step-by-step.",
+        "- `triggerParams` and `actionParams` are passed through as-is to Stackby's backend and may vary by trigger/action type.",
+      ];
+      return {
+        content: [{ type: "text" as const, text: lines.join("\n") }],
+      };
+    })
+  );
+
+  mcpServer.registerTool(
+    "list_automations",
+    {
+      description: "List automations in a Stackby stack.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      if (!sId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId is required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await getAutomations(sId);
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to list automations: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "get_automation",
+    {
+      description: "Get full details for one automation.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        automationId: z.string().describe("Automation ID"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const automationId = input.automationId?.trim();
+      if (!sId || !automationId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and automationId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await getAutomation(sId, automationId);
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to get automation: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "create_automation",
+    {
+      description:
+        "Create a full automation workflow in one step. Best tool for user-friendly automation setup: creates the automation, its trigger, and optional actions.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        name: z.string().describe("Automation name"),
+        description: z.string().optional().describe("Automation description"),
+        isTurnedOn: z.boolean().optional().describe("Whether the automation should be turned on"),
+        tableId: z.string().optional().describe("Optional primary table id for the automation"),
+        viewId: z.string().optional().describe("Optional view id for the automation"),
+        trigger: z.object({
+          triggerType: z.string().describe("Trigger type code. Use list_automation_capabilities first."),
+          triggerParams: z.unknown().optional().describe("Trigger configuration payload"),
+          tableId: z.string().optional().describe("Table id used by the trigger"),
+          description: z.string().optional().describe("Trigger description"),
+        }),
+        actions: z.array(z.object({
+          actionType: z.string().describe("Action type code. Use list_automation_capabilities first."),
+          actionParams: z.unknown().optional().describe("Action configuration payload"),
+          sequence: z.number().optional().describe("Optional execution order"),
+          description: z.string().optional().describe("Action description"),
+        })).optional(),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const name = input.name?.trim();
+      const trigger = input.trigger;
+      if (!sId || !name || !trigger?.triggerType?.trim()) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, name, and trigger.triggerType are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await createAutomation(sId, {
+          name,
+          description: input.description,
+          isTurnedOn: input.isTurnedOn,
+          tableId: input.tableId?.trim() || undefined,
+          viewId: input.viewId?.trim() || undefined,
+          trigger: {
+            triggerType: trigger.triggerType.trim(),
+            triggerParams: trigger.triggerParams,
+            tableId: trigger.tableId?.trim() || undefined,
+            description: trigger.description,
+          },
+          actions: Array.isArray(input.actions)
+            ? input.actions.map((action: any) => ({
+                actionType: action.actionType?.trim(),
+                actionParams: action.actionParams,
+                sequence: action.sequence,
+                description: action.description,
+              }))
+            : undefined,
+        });
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to create automation: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "update_automation",
+    {
+      description: "Update automation metadata such as name, description, enabled state, table, or view.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        automationId: z.string().describe("Automation ID"),
+        body: z.record(z.string(), z.unknown()).describe("PATCH payload for the automation"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const automationId = input.automationId?.trim();
+      const body = input.body as Record<string, unknown> | undefined;
+      if (!sId || !automationId || !body) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, automationId, and body are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await updateAutomation(sId, automationId, body);
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to update automation: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "delete_automation",
+    {
+      description: "Delete an automation workflow.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        automationId: z.string().describe("Automation ID"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const automationId = input.automationId?.trim();
+      if (!sId || !automationId) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and automationId are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await deleteAutomation(sId, automationId);
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to delete automation: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "add_automation_trigger",
+    {
+      description:
+        "Add a trigger to an existing automation. This is the step-by-step helper version of the low-level automation trigger API.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        automationId: z.string().describe("Triggered automation ID"),
+        triggerType: z.string().describe("Trigger type code"),
+        triggerParams: z.unknown().optional().describe("Trigger configuration payload"),
+        tableId: z.string().optional().describe("Table id used by the trigger"),
+        description: z.string().optional().describe("Optional trigger description"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const automationId = input.automationId?.trim();
+      const triggerType = input.triggerType?.trim();
+      if (!sId || !automationId || !triggerType) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, automationId, and triggerType are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await mcpAutomationTriggerAction(sId, "create", {
+          triggeredAutomationId: automationId,
+          triggerType,
+          triggerParams: input.triggerParams,
+          tableId: input.tableId?.trim() || undefined,
+          description: input.description,
+        });
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to add automation trigger: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "add_automation_action",
+    {
+      description:
+        "Add an action step to an existing automation. This is the step-by-step helper version of the low-level automation action API.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        automationId: z.string().describe("Triggered automation ID"),
+        actionType: z.string().describe("Action type code"),
+        actionParams: z.unknown().optional().describe("Action configuration payload"),
+        sequence: z.number().optional().describe("Optional execution sequence"),
+        description: z.string().optional().describe("Optional action description"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const automationId = input.automationId?.trim();
+      const actionType = input.actionType?.trim();
+      if (!sId || !automationId || !actionType) {
+        return {
+          content: [{ type: "text" as const, text: "stackId, automationId, and actionType are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await mcpAutomationActionAction(sId, "create", {
+          triggeredAutomationId: automationId,
+          actionType,
+          actionParams: input.actionParams,
+          sequence: input.sequence,
+          description: input.description,
+        });
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `Failed to add automation action: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "automation_workflow_action",
+    {
+      description:
+        "Advanced passthrough for Stackby automation workflow actions. Use this for duplicate, updateSequence, section actions, updateDescription, and other backend workflow operations.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        action: z.string().describe("Workflow action name"),
+        body: z.record(z.string(), z.unknown()).optional().describe("Action payload"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const action = input.action?.trim();
+      if (!sId || !action) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and action are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await mcpAutomationWorkflowAction(sId, action, (input.body as Record<string, unknown>) ?? {});
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `automation_workflow_action failed: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "automation_trigger_action",
+    {
+      description:
+        "Advanced passthrough for Stackby automation trigger actions. Supports backend actions like create, update, delete, list, and trigger.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        action: z.string().describe("Trigger action name"),
+        body: z.record(z.string(), z.unknown()).optional().describe("Action payload"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const action = input.action?.trim();
+      if (!sId || !action) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and action are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await mcpAutomationTriggerAction(sId, action, (input.body as Record<string, unknown>) ?? {});
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `automation_trigger_action failed: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
+
+  mcpServer.registerTool(
+    "automation_action_action",
+    {
+      description:
+        "Advanced passthrough for Stackby automation action-step operations. Supports backend actions like create, update, delete, list, updateSequence, duplicate, and updateDescription.",
+      inputSchema: {
+        stackId: z.string().describe("Stack ID"),
+        action: z.string().describe("Action-step operation name"),
+        body: z.record(z.string(), z.unknown()).optional().describe("Action payload"),
+      },
+    },
+    withCamel(async (input) => {
+      const sId = input.stackId?.trim();
+      const action = input.action?.trim();
+      if (!sId || !action) {
+        return {
+          content: [{ type: "text" as const, text: "stackId and action are required." }],
+          isError: true,
+        };
+      }
+      if (!hasAuthCredential()) {
+        return {
+          content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
+        };
+      }
+      try {
+        const data = await mcpAutomationActionAction(sId, action, (input.body as Record<string, unknown>) ?? {});
+        const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          content: [{ type: "text" as const, text: `automation_action_action failed: ${message}` }],
+          isError: true,
+        };
+      }
+    })
+  );
 
   mcpServer.registerTool(
     "dashboard_action",
