@@ -92,37 +92,70 @@ const AUTOMATION_TRIGGER_CATALOG = [
     code: "T_CR_ROW",
     name: "When record created",
     description: "Runs when a new row is created in a table.",
-    typicalParams: { example: "Usually no extra params beyond tableId." },
+    whereToSetTable: "top-level trigger.tableId",
+    paramsExample: {},
+    notes: ["Usually no triggerParams are needed beyond the trigger table."],
   },
   {
     code: "T_UP_ROW",
     name: "When record updated",
     description: "Runs when a row is updated.",
-    typicalParams: { example: "May include watched fields or update conditions." },
+    whereToSetTable: "top-level trigger.tableId",
+    paramsExample: {
+      watchingColumns: ["cl_status", "cl_owner"],
+      testStepSelectedRow: "rw_sample123",
+      columnList: ["cl_status", "cl_owner"],
+    },
+    notes: ["`watchingColumns` is read by the backend and is the most useful field here."],
   },
   {
     code: "SD_TIME",
     name: "At scheduled time",
     description: "Runs on a schedule or date/time-based cadence.",
-    typicalParams: { example: "Schedule/date/time configuration in triggerParams." },
+    whereToSetTable: "top-level trigger.tableId",
+    paramsExample: {
+      interval: "days",
+      days: {
+        every: 1,
+        startAtDate: "2026-05-06T09:00:00.000Z",
+      },
+      nextTriggerTime: "2026-05-07T09:00:00.000Z",
+    },
+    notes: ["Supported schedule buckets in code include minutes, hours, days, weeks, months, and oneTime."],
   },
   {
     code: "WH_RECV",
     name: "Webhook received",
     description: "Runs when an incoming webhook hits the automation.",
-    typicalParams: { example: "Webhook configuration in triggerParams." },
+    whereToSetTable: "optional, depends on webhook flow",
+    paramsExample: {},
+    notes: ["Backend supports this trigger type, but the exact webhook config shape is not obvious from the MCP wrapper alone."],
   },
   {
     code: "RW_COND",
     name: "Row matches conditions",
     description: "Runs when a row enters matching conditions.",
-    typicalParams: { example: "Condition/filter definition in triggerParams." },
+    whereToSetTable: "top-level trigger.tableId",
+    paramsExample: {
+      filterData: {
+        filterSet: [
+          { columnId: "cl_status", operator: "is", value: "Open" },
+        ],
+      },
+      testStepSelectedRow: "rw_sample123",
+    },
+    notes: ["This example is based on how condition values are read downstream for row filtering."],
   },
   {
     code: "VM_ROW",
     name: "View match / row event",
     description: "Row/view-driven trigger used by the automation system.",
-    typicalParams: { example: "View or row matching settings in triggerParams." },
+    whereToSetTable: "top-level trigger.tableId",
+    paramsExample: {
+      viewId: "vi_example123",
+      testStepSelectedRow: "rw_sample123",
+    },
+    notes: ["Use when the automation depends on a specific view or view-based matching."],
   },
 ] as const;
 
@@ -131,56 +164,151 @@ const AUTOMATION_ACTION_CATALOG = [
     code: "CR_ROW",
     name: "Create record",
     description: "Create a new row in a target table.",
+    paramsExample: {
+      tableId: "tb_target123",
+      column: {
+        cl_name: "tb_source123 cl_title",
+        cl_status: "Open",
+      },
+    },
+    notes: ["`column` maps target column ids to static values or trigger-derived values."],
   },
   {
     code: "UP_ROW",
     name: "Update record",
     description: "Update an existing row in a target table.",
+    paramsExample: {
+      tableId: "tb_target123",
+      rowId: "rw_target123",
+      column: {
+        cl_status: "Done",
+        cl_notes: "tb_source123 cl_summary",
+      },
+    },
+    notes: ["`rowId` is required. It can be a literal row id or a dynamic reference resolved by the backend."],
   },
   {
     code: "FIND_ROW",
     name: "Find record",
     description: "Look up rows to use in later automation steps.",
+    paramsExample: {
+      tableId: "tb_target123",
+      findOn: "condition",
+      maximumRow: 25,
+      filterData: {
+        filterSet: [
+          { columnId: "cl_status", operator: "is", value: "tb_source123 cl_status" },
+        ],
+      },
+    },
+    notes: ["Common patterns are `findOn: \"condition\"` with `filterData`, or a view-based search with `viewId`."],
   },
   {
     code: "S_EMAIL",
     name: "Send email",
     description: "Send an email from Stackby automation.",
+    paramsExample: {
+      toWithColumnId: "tb_source123 cl_email",
+      subjectWithColumnId: "New update for {{Name}}",
+      messageWithColumnId: "Hello {{Name}}, your record was updated.",
+      ccWithColumnId: "",
+      bccWithColumnId: "",
+      fromNameWithColumnId: "Stackby Automations",
+      replyToWithColumnId: "",
+      attechmentWithColumnId: [],
+    },
+    notes: ["Email actions use `...WithColumnId` fields heavily in the backend."],
   },
   {
     code: "WHATSAPP",
     name: "Send WhatsApp",
     description: "Send a WhatsApp message.",
+    paramsExample: {
+      apiConfigId: "wa_config_123",
+      templateName: "order_update",
+      whatsappActionObj: {
+        sendto: ["tb_source123 cl_phone"],
+        header: [],
+        body: ["Hello {{Name}}"],
+        buttons: [],
+      },
+    },
+    notes: ["The backend reads `templateName`, `apiConfigId`, and `whatsappActionObj.sendto/header/body/buttons`."],
   },
   {
     code: "GMAIL",
     name: "Send Gmail",
     description: "Send an email using Gmail integration.",
+    paramsExample: {
+      toWithColumnId: "tb_source123 cl_email",
+      subjectWithColumnId: "Follow-up",
+      messageWithColumnId: "Hello from Gmail automation",
+    },
+    notes: ["Likely similar to email-style actions, but exact integration-specific fields may vary."],
   },
   {
     code: "OUTLOOK",
     name: "Send Outlook email",
     description: "Send an email using Outlook integration.",
+    paramsExample: {
+      toWithColumnId: "tb_source123 cl_email",
+      subjectWithColumnId: "Follow-up",
+      messageWithColumnId: "Hello from Outlook automation",
+    },
+    notes: ["Likely similar to email-style actions, but exact integration-specific fields may vary."],
   },
   {
     code: "MS_TEAM",
     name: "Send to Microsoft Teams",
     description: "Post or notify via Microsoft Teams.",
+    paramsExample: {
+      teamId: "team_123",
+      channelId: "channel_123",
+      accessToken: "token",
+      refreshToken: "refresh",
+      body: "New record was created",
+    },
+    notes: ["These fields are read directly in the runtime handler."],
   },
   {
     code: "SLACK",
     name: "Send Slack message",
     description: "Post a message to Slack.",
+    paramsExample: {
+      channelId: "C123456",
+      accessToken: "xoxb-...",
+      message: "A new record was created",
+      botName: "Stackby Bot",
+      icon_url: "https://example.com/icon.png",
+    },
+    notes: ["These fields are read directly in the runtime handler."],
   },
   {
     code: "SORT",
     name: "Sort records",
     description: "Run a sort-related automation step.",
+    paramsExample: {
+      findActionId: "ac_find123",
+      sort: [{ columnId: "cl_priority", direction: "asc" }],
+    },
+    notes: ["`findActionId` should point to a prior `FIND_ROW` action whose result you want to sort."],
   },
   {
     code: "AI_GEN",
     name: "AI generate",
     description: "Generate content with an AI-powered automation step.",
+    paramsExample: {
+      findActionId: "ac_find123",
+      columnCellvalues: {
+        cl_prompt: { str: "Summarize this row" },
+      },
+      aiActionConfig: {},
+      column: {
+        cl_output: "Generated content goes here",
+      },
+      generatedData: {},
+    },
+    notes: ["The backend reads `findActionId`, `columnCellvalues`, `aiActionConfig`, `column`, and `generatedData`."],
   },
 ] as const;
 
@@ -1234,10 +1362,19 @@ export function createStackbyMcpServer(): McpServer {
       const actionActions = ["create", "update", "delete", "list", "action", "updateSequence", "duplicate", "updateDescription"];
       const lines = [
         "Automation trigger types:",
-        ...AUTOMATION_TRIGGER_CATALOG.map((item) => `- ${item.code}: ${item.name} — ${item.description}`),
+        ...AUTOMATION_TRIGGER_CATALOG.flatMap((item) => [
+          `- ${item.code}: ${item.name} — ${item.description}`,
+          `  table: ${item.whereToSetTable}`,
+          `  triggerParams example: ${JSON.stringify(item.paramsExample)}`,
+          `  notes: ${item.notes.join(" ")}`,
+        ]),
         "",
         "Automation action types:",
-        ...AUTOMATION_ACTION_CATALOG.map((item) => `- ${item.code}: ${item.name} — ${item.description}`),
+        ...AUTOMATION_ACTION_CATALOG.flatMap((item) => [
+          `- ${item.code}: ${item.name} — ${item.description}`,
+          `  actionParams example: ${JSON.stringify(item.paramsExample)}`,
+          `  notes: ${item.notes.join(" ")}`,
+        ]),
         "",
         `Advanced workflow endpoint actions: ${workflowActions.join(", ")}`,
         `Advanced trigger endpoint actions: ${triggerActions.join(", ")}`,
