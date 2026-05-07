@@ -343,6 +343,83 @@ export function createStackbyMcpServer(): McpServer {
     };
   }
 
+  function normalizeBlockType(type: unknown): string {
+    const raw = typeof type === "string" ? type.trim() : "";
+    if (!raw) return "Chart";
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+
+  function normalizeBlockActionBody(
+    stackId: string,
+    blockId: string,
+    action: string,
+    body: Record<string, unknown> = {}
+  ): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      ...body,
+      stackId: (body.stackId as string | undefined) ?? stackId,
+    };
+    if (action !== "create") {
+      return payload;
+    }
+
+    if (payload.blockFields || payload.gridLayout || payload.linearLayout) {
+      return payload;
+    }
+
+    const dashboardId = typeof payload.dashboardId === "string" ? payload.dashboardId.trim() : "";
+    const name = typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : "Chart";
+    const blockType = normalizeBlockType(payload.type);
+    const layout =
+      payload.layout && typeof payload.layout === "object"
+        ? (payload.layout as Record<string, unknown>)
+        : {};
+    const config =
+      payload.config && typeof payload.config === "object"
+        ? (payload.config as Record<string, unknown>)
+        : {};
+
+    const x = typeof layout.x === "number" ? layout.x : 0;
+    const y = typeof layout.y === "number" ? layout.y : 0;
+    const w = typeof layout.w === "number" ? layout.w : 2;
+    const h = typeof layout.h === "number" ? layout.h : 3;
+
+    const blockFields: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (value !== undefined) {
+        blockFields[key] = value;
+      }
+    }
+
+    return {
+      stackId: payload.stackId,
+      dashboardId,
+      name,
+      blockFields: JSON.stringify(blockFields),
+      gridLayout: JSON.stringify({
+        i: blockId,
+        x,
+        y,
+        w,
+        h,
+        minH: 1,
+        minW: 1,
+      }),
+      linearLayout: JSON.stringify({
+        i: blockId,
+        x,
+        y,
+        w: 1,
+        h,
+        minH: 1,
+        minW: 1,
+        moved: false,
+        static: false,
+      }),
+      type: blockType,
+    };
+  }
+
 
   mcpServer.registerTool(
     "list_workspaces",
@@ -2206,7 +2283,13 @@ export function createStackbyMcpServer(): McpServer {
         };
       }
       try {
-        const data = await mcpBlockAction(sId, blockId, act, (actionBody as Record<string, unknown>) ?? {});
+        const normalizedBody = normalizeBlockActionBody(
+          sId,
+          blockId,
+          act,
+          (actionBody as Record<string, unknown>) ?? {}
+        );
+        const data = await mcpBlockAction(sId, blockId, act, normalizedBody);
         const text = typeof data === "string" ? data : JSON.stringify(data, null, 2);
         return { content: [{ type: "text" as const, text }] };
       } catch (err) {
