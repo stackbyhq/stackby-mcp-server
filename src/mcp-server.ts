@@ -378,6 +378,17 @@ export function createStackbyMcpServer(): McpServer {
       payload.config && typeof payload.config === "object"
         ? (payload.config as Record<string, unknown>)
         : {};
+    const reservedBlockKeys = new Set([
+      "stackId",
+      "dashboardId",
+      "name",
+      "type",
+      "layout",
+      "config",
+      "blockFields",
+      "gridLayout",
+      "linearLayout",
+    ]);
 
     const x = typeof layout.x === "number" ? layout.x : 0;
     const y = typeof layout.y === "number" ? layout.y : 0;
@@ -389,6 +400,12 @@ export function createStackbyMcpServer(): McpServer {
       if (value !== undefined) {
         blockFields[key] = value;
       }
+    }
+    for (const [key, value] of Object.entries(payload)) {
+      if (reservedBlockKeys.has(key) || value === undefined) {
+        continue;
+      }
+      blockFields[key] = value;
     }
 
     return {
