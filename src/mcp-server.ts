@@ -34,6 +34,7 @@ import {
   getAutomation,
   updateAutomation,
   deleteAutomation,
+  normalizeColumnType,
   mcpAutomationWorkflowAction,
   mcpAutomationTriggerAction,
   mcpAutomationActionAction,
@@ -1423,7 +1424,7 @@ export function createStackbyMcpServer(): McpServer {
   mcpServer.registerTool(
     "create_field",
     {
-      description: "Create a new column (field) in a table. Use describe_table to see existing columns. For singleOption/multipleOptions pass options array. For link columns, provide linkToTableId. For formula columns, pass formulaText (e.g. {Amount} * {Quantity}).",
+      description: "Create a new column (field) in a table. Use describe_table to see existing columns. For singleOption/multipleOptions pass options array. For link columns, provide linkToTableId. For formula columns, pass formulaText (e.g. {Amount} * {Quantity}). For lookup/count/rollup fields you can pass linkColumnId (the link field on this table) and linkedColumnId (the foreign-table field to read/roll up).",
       inputSchema: {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
         tableId: z.string().describe("Table ID (from list_tables)"),
@@ -1436,11 +1437,25 @@ export function createStackbyMcpServer(): McpServer {
           .describe("For singleOption/multipleOptions: choice labels. Accepts array or JSON string array."),
         linkToTableId: z.string().optional().describe("For link columns: Table ID to connect to (required when columnType is link). Use list_tables to get table IDs."),
         linkToTableViewId: z.string().optional().describe("For link columns: View ID of the target table (optional; first view used if omitted)"),
+        linkColumnId: z.string().optional().describe("For lookup / count / lookupCount / aggregation / rollup: link field ID on this table (relational link column)."),
+        linkedColumnId: z.string().optional().describe("For lookup / aggregation / rollup: field ID on the linked (foreign) table to display or roll up."),
         formulaText: z.string().optional().describe("For formula columns: the formula expression (e.g. {Amount} * {Quantity} or CREATED_TIME). Use column names in braces."),
       },
     },
     withCamel(async (input) => {
-      const { stackId, tableId, name, columnType, viewId, options, linkToTableId, linkToTableViewId, formulaText } = input;
+      const {
+        stackId,
+        tableId,
+        name,
+        columnType,
+        viewId,
+        options,
+        linkToTableId,
+        linkToTableViewId,
+        linkColumnId,
+        linkedColumnId,
+        formulaText,
+      } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       const colName = name?.trim();
@@ -1478,6 +1493,8 @@ export function createStackbyMcpServer(): McpServer {
         };
       }
       const isLinkType = /^link$/i.test(type);
+      const normalizedType = normalizeColumnType(type);
+      const isLookupFamilyType = normalizedType === "lookup" || normalizedType === "lookupCount" || normalizedType === "aggregation";
       if (isLinkType && !linkToTableId?.trim()) {
         return {
           content: [{
@@ -1503,6 +1520,8 @@ export function createStackbyMcpServer(): McpServer {
           options: parsedOptions && parsedOptions.length > 0 ? parsedOptions : undefined,
           linkToTableId: isLinkType ? linkToTableId?.trim() : undefined,
           linkToTableViewId: isLinkType ? linkToViewId : undefined,
+          linkColumnId: isLookupFamilyType ? linkColumnId?.trim() : undefined,
+          linkedColumnId: isLookupFamilyType ? linkedColumnId?.trim() : undefined,
           formulaText: formulaText?.trim() || undefined,
         });
         const id = result?.columnId ?? result?.id ?? "unknown";
