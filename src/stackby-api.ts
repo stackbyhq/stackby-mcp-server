@@ -762,7 +762,7 @@ export async function createColumn(
     if (opts.timeFormat) body.timeFormat = opts.timeFormat;
     if (opts.isTimeInclude != null) body.isTimeInclude = opts.isTimeInclude;
   }
-  if (normalizedType === "formula" && opts.formulaText?.trim()) {
+  if ((normalizedType === "formula" || normalizedType === "aggregation") && opts.formulaText?.trim()) {
     body.formulaText = opts.formulaText.trim();
   }
 

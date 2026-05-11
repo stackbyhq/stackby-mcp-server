@@ -93,6 +93,23 @@ const templateTableSchema = z.object({
   rows: z.array(templateRowSchema).optional(),
 });
 
+const AGGREGATION_FORMULAS = new Set([
+  "MIN(values)",
+  "MAX(values)",
+  "SUM(values)",
+  "AVERAGE(values)",
+  "COUNT(values)",
+  "COUNTA(values)",
+  "COUNTALL(values)",
+  "AND(values)",
+  "OR(values)",
+  "XOR(values)",
+  "ARRAYJOIN(values)",
+  "ARRAYUNIQUE(values)",
+  "ARRAYCOMPACT(values)",
+  "ARRAYFLATTEN(values)",
+]);
+
 const AUTOMATION_TRIGGER_CATALOG = [
   {
     code: "T_CR_ROW",
@@ -1440,7 +1457,7 @@ export function createStackbyMcpServer(): McpServer {
         linkToTableViewId: z.string().optional().describe("For link columns: View ID of the target table (optional; first view used if omitted)"),
         linkColumnId: z.string().optional().describe("For lookup / count / lookupCount / aggregation / rollup: link field ID on this table (the relational link field on the table where this new field is being created)."),
         linkedColumnId: z.string().optional().describe("For lookup / aggregation / rollup: field ID on the linked (foreign) table to display or roll up. Not required for lookupCount/count."),
-        formulaText: z.string().optional().describe("For formula columns: the formula expression (e.g. {Amount} * {Quantity} or CREATED_TIME). Use column names in braces."),
+        formulaText: z.string().optional().describe("For formula columns: formula expression (e.g. {Amount} * {Quantity} or CREATED_TIME). For aggregation/rollup: only one of MIN(values), MAX(values), SUM(values), AVERAGE(values), COUNT(values), COUNTA(values), COUNTALL(values), AND(values), OR(values), XOR(values), ARRAYJOIN(values), ARRAYUNIQUE(values), ARRAYCOMPACT(values), ARRAYFLATTEN(values)."),
       },
     },
     withCamel(async (input) => {
@@ -1493,9 +1510,19 @@ export function createStackbyMcpServer(): McpServer {
           content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
-      const isLinkType = /^link|lookup|lookupCount|aggregation|rollup$/i.test(type);
+      const isLinkType = /^link$/i.test(type);
       const normalizedType = normalizeColumnType(type);
       const isLookupFamilyType = normalizedType === "lookup" || normalizedType === "lookupCount" || normalizedType === "aggregation";
+      const trimmedFormulaText = formulaText?.trim();
+      if (normalizedType === "aggregation" && trimmedFormulaText && !AGGREGATION_FORMULAS.has(trimmedFormulaText)) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `Invalid formulaText for aggregation/rollup. Allowed values: ${Array.from(AGGREGATION_FORMULAS).join(", ")}`,
+          }],
+          isError: true,
+        };
+      }
       if (isLinkType && !linkToTableId?.trim()) {
         return {
           content: [{
@@ -1523,7 +1550,7 @@ export function createStackbyMcpServer(): McpServer {
           linkToTableViewId: isLinkType ? linkToViewId : undefined,
           linkColumnId: isLookupFamilyType ? linkColumnId?.trim() : undefined,
           linkedColumnId: isLookupFamilyType ? linkedColumnId?.trim() : undefined,
-          formulaText: formulaText?.trim() || undefined,
+          formulaText: trimmedFormulaText || undefined,
         });
         const id = result?.columnId ?? result?.id ?? "unknown";
         const text = [`Created column: ${colName}`, `Column ID: ${id}`, `Type: ${type}`].join("\n");
@@ -2341,6 +2368,5 @@ export function createStackbyMcpServer(): McpServer {
 
   return mcpServer;
 }
-
 
 
