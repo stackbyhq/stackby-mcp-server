@@ -1493,7 +1493,7 @@ export function createStackbyMcpServer(): McpServer {
           content: [{ type: "text" as const, text: "No auth credential found. Set STACKBY_API_KEY or STACKBY_BEARER_TOKEN in MCP config, or send Authorization: Bearer <token> in hosted mode." }],
         };
       }
-      const isLinkType = /^link$/i.test(type);
+      const isLinkType = /^link|lookup|lookupCount|aggregation|rollup$/i.test(type);
       const normalizedType = normalizeColumnType(type);
       const isLookupFamilyType = normalizedType === "lookup" || normalizedType === "lookupCount" || normalizedType === "aggregation";
       if (isLinkType && !linkToTableId?.trim()) {
