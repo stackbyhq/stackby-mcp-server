@@ -1424,12 +1424,13 @@ export function createStackbyMcpServer(): McpServer {
   mcpServer.registerTool(
     "create_field",
     {
-      description: "Create a new column (field) in a table. Use describe_table to see existing columns. For singleOption/multipleOptions pass options array. For link columns, provide linkToTableId. For formula columns, pass formulaText (e.g. {Amount} * {Quantity}). For lookup/count/rollup fields you can pass linkColumnId (the link field on this table) and linkedColumnId (the foreign-table field to read/roll up).",
+      description:
+        "Create a new column (field) in a table. Use describe_table first to get field IDs. For singleOption/multipleOptions pass options. For link pass linkToTableId. For formula pass formulaText. For relational computed fields: lookup, count/lookupCount, and rollup/aggregation, use linkColumnId as the link field on the current table; use linkedColumnId as the source field on the linked (foreign) table (needed for lookup and rollup/aggregation). Example: adding a lookup in Table 1 for Col2 from Table 2 -> linkColumnId is Table 1 link field, linkedColumnId is Table 2 Col2 field id.",
       inputSchema: {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
         tableId: z.string().describe("Table ID (from list_tables)"),
         name: z.string().describe("Column name"),
-        columnType: z.string().describe("Column type: shortText, longText, number, checkbox, dateAndTime, singleOption, multipleOptions, email, url, link, formula, etc."),
+        columnType: z.string().describe("Column type: shortText, longText, number, checkbox, dateAndTime, singleOption, multipleOptions, email, url, link, formula, lookup, lookupCount (or count), aggregation (or rollup), etc."),
         viewId: z.string().optional().describe("View ID (optional; first view used if omitted)"),
         options: z
           .union([z.array(z.string()), z.string()])
@@ -1437,8 +1438,8 @@ export function createStackbyMcpServer(): McpServer {
           .describe("For singleOption/multipleOptions: choice labels. Accepts array or JSON string array."),
         linkToTableId: z.string().optional().describe("For link columns: Table ID to connect to (required when columnType is link). Use list_tables to get table IDs."),
         linkToTableViewId: z.string().optional().describe("For link columns: View ID of the target table (optional; first view used if omitted)"),
-        linkColumnId: z.string().optional().describe("For lookup / count / lookupCount / aggregation / rollup: link field ID on this table (relational link column)."),
-        linkedColumnId: z.string().optional().describe("For lookup / aggregation / rollup: field ID on the linked (foreign) table to display or roll up."),
+        linkColumnId: z.string().optional().describe("For lookup / count / lookupCount / aggregation / rollup: link field ID on this table (the relational link field on the table where this new field is being created)."),
+        linkedColumnId: z.string().optional().describe("For lookup / aggregation / rollup: field ID on the linked (foreign) table to display or roll up. Not required for lookupCount/count."),
         formulaText: z.string().optional().describe("For formula columns: the formula expression (e.g. {Amount} * {Quantity} or CREATED_TIME). Use column names in braces."),
       },
     },

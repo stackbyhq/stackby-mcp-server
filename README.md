@@ -104,6 +104,37 @@ Alternatively use `"Authorization": "Bearer your-api-key-or-pat"` instead of `X-
 
 ---
 
+## create_field parameter guide
+
+Use `create_field` with these key inputs:
+
+- Required for all: `stackId`, `tableId`, `name`, `columnType`
+- Optional common: `viewId`
+- For `singleOption` / `multipleOptions`: `options`
+- For `link`: `linkToTableId` (required), `linkToTableViewId` (optional)
+- For `formula`: `formulaText`
+
+For relational computed fields (`lookup`, `count` / `lookupCount`, `rollup` / `aggregation`):
+
+- `linkColumnId`: link field ID on the current table (the relational link column on the table where you are creating the new field)
+- `linkedColumnId`: field ID on the linked (foreign) table
+
+How to map by type:
+
+- `lookup`: use `linkColumnId`, usually with `linkedColumnId`
+- `lookupCount` (or `count`): use `linkColumnId` (no `linkedColumnId` needed)
+- `aggregation` (or `rollup`): use `linkColumnId` and `linkedColumnId`
+
+Example:
+
+- If adding lookup in **Table 1** to show `Col2` from **Table 2**:
+  - `linkColumnId` = link column on Table 1 that points to Table 2
+  - `linkedColumnId` = `Col2` column ID from Table 2
+
+Tip: run `describe_table` on both tables first to get correct column IDs.
+
+---
+
 ## Setup
 
 ```bash
@@ -213,6 +244,17 @@ Or one-click: `npx stackby-mcp-server` (after npm publish)
 **Same errors when adding as a local server**
 
 - If you want to run the server locally, add it as a **command (stdio)** server, not as a URL: **Command** `npx`, **Args** `["-y", "stackby-mcp-server"]`, **Env** `{ "STACKBY_API_KEY": "your-api-key-or-pat" }`.
+
+**`Stackby:describe_table` says "has not been loaded yet" / asks for `tool_search` first**
+
+- This is usually a client tool-catalog loading issue (not a `describe_table` parameter bug).
+- Fix steps:
+  1. Restart the MCP client session (or restart Cursor/ChatGPT connector).
+  2. Ensure server is rebuilt/restarted if local (`npm run build`, then restart the MCP server process).
+  3. Run client tool discovery first (`tool_search` with query like `stackby describe table`), then call `describe_table`.
+- `describe_table` supports both key styles:
+  - camelCase: `stackId`, `tableId`
+  - snake_case: `stack_id`, `table_id`
 
 ---
 
