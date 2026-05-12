@@ -1442,7 +1442,7 @@ export function createStackbyMcpServer(): McpServer {
     "create_field",
     {
       description:
-        "Create a new column (field) in a table. Use describe_table first to get field IDs. For singleOption/multipleOptions pass options. For link pass linkToTableId. For formula pass formulaText. For relational computed fields: lookup, count/lookupCount, and rollup/aggregation, use linkColumnId as the link field on the current table; use linkedColumnId as the source field on the linked (foreign) table (needed for lookup and rollup/aggregation). Example: adding a lookup in Table 1 for Col2 from Table 2 -> linkColumnId is Table 1 link field, linkedColumnId is Table 2 Col2 field id.",
+        "Create a new column (field) in a table. Use describe_table first to get field IDs. For singleOption/multipleOptions pass options. For link pass linkToTableId. IMPORTANT for formula columns: always pass `formulaText` and always reference column names in curly braces, e.g. `{Reach}+{Impressions}+{Likes}` (not `Reach+Impressions+Likes`). Legacy key `formula` is accepted, but `formulaText` is preferred. For relational computed fields: lookup, count/lookupCount, and rollup/aggregation, use linkColumnId as the link field on the current table; use linkedColumnId as the source field on the linked (foreign) table (needed for lookup and rollup/aggregation). Example: adding a lookup in Table 1 for Col2 from Table 2 -> linkColumnId is Table 1 link field, linkedColumnId is Table 2 Col2 field id.",
       inputSchema: {
         stackId: z.string().describe("Stack ID (from list_stacks)"),
         tableId: z.string().describe("Table ID (from list_tables)"),
@@ -1457,7 +1457,8 @@ export function createStackbyMcpServer(): McpServer {
         linkToTableViewId: z.string().optional().describe("For link columns: View ID of the target table (optional; first view used if omitted)"),
         linkColumnId: z.string().optional().describe("For lookup / count / lookupCount / aggregation / rollup: link field ID on this table (the relational link field on the table where this new field is being created)."),
         linkedColumnId: z.string().optional().describe("For lookup / aggregation / rollup: field ID on the linked (foreign) table to display or roll up. Not required for lookupCount/count."),
-        formulaText: z.string().optional().describe("For formula columns: formula expression (e.g. {Amount} * {Quantity} or CREATED_TIME). For aggregation/rollup: only one of MIN(values), MAX(values), SUM(values), AVERAGE(values), COUNT(values), COUNTA(values), COUNTALL(values), AND(values), OR(values), XOR(values), ARRAYJOIN(values), ARRAYUNIQUE(values), ARRAYCOMPACT(values), ARRAYFLATTEN(values)."),
+        formula: z.string().optional().describe("Legacy alias for formulaText; accepted for compatibility."),
+        formulaText: z.string().optional().describe("For formula columns (required): formula expression using curly-brace column refs, e.g. {Amount}*{Quantity} or {Reach}+{Impressions}+{Likes}. Do NOT pass plain names without braces. For aggregation/rollup (required): only one of MIN(values), MAX(values), SUM(values), AVERAGE(values), COUNT(values), COUNTA(values), COUNTALL(values), AND(values), OR(values), XOR(values), ARRAYJOIN(values), ARRAYUNIQUE(values), ARRAYCOMPACT(values), ARRAYFLATTEN(values)."),
       },
     },
     withCamel(async (input) => {
@@ -1472,6 +1473,7 @@ export function createStackbyMcpServer(): McpServer {
         linkToTableViewId,
         linkColumnId,
         linkedColumnId,
+        formula,
         formulaText,
       } = input;
       const sId = stackId?.trim();
@@ -1513,7 +1515,19 @@ export function createStackbyMcpServer(): McpServer {
       const isLinkType = /^link$/i.test(type);
       const normalizedType = normalizeColumnType(type);
       const isLookupFamilyType = normalizedType === "lookup" || normalizedType === "lookupCount" || normalizedType === "aggregation";
-      const trimmedFormulaText = formulaText?.trim();
+      const rawFormulaText = (typeof formulaText === "string" && formulaText.trim())
+        ? formulaText
+        : (typeof formula === "string" ? formula : undefined);
+      let trimmedFormulaText = rawFormulaText?.trim();
+      if ((normalizedType === "formula" || normalizedType === "aggregation") && !trimmedFormulaText) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: `formulaText is required for ${normalizedType} columns. For formula, pass expressions like {Reach}+{Impressions}. For aggregation/rollup, pass one of: ${Array.from(AGGREGATION_FORMULAS).join(", ")}`,
+          }],
+          isError: true,
+        };
+      }
       if (normalizedType === "aggregation" && trimmedFormulaText && !AGGREGATION_FORMULAS.has(trimmedFormulaText)) {
         return {
           content: [{
@@ -2368,5 +2382,3 @@ export function createStackbyMcpServer(): McpServer {
 
   return mcpServer;
 }
-
-
