@@ -208,6 +208,7 @@ export async function createView(
     copyMode?: "new" | "duplicate";
     copyViewId?: string;
     sequenceViewId?: string;
+    filters?: unknown;
     description?: string;
     groupLevels?: unknown;
     isPersonal?: unknown;
