@@ -624,8 +624,9 @@ export function createStackbyMcpServer(): McpServer {
           template = created.template;
         }
 
-        const id = stack?.stackId ?? (stack as any)?.id ?? "unknown";
-        const returnedName = stack?.stackName ?? stackName;
+        const stackObj = Array.isArray(stack) ? stack[0] : stack;
+        const id = stackObj?.stackId ?? stackObj?.id ?? "unknown";
+        const returnedName = stackObj?.stackName ?? stackName;
         const lines = [
           `Created stack: ${returnedName}`,
           `Stack ID: ${id}`,
@@ -732,11 +733,13 @@ export function createStackbyMcpServer(): McpServer {
         copyMode: z.enum(["new", "duplicate"]).optional(),
         copyViewId: z.string().optional().describe("Required if copyMode is duplicate"),
         sequenceViewId: z.string().optional().describe("View to copy column/row order from (default: first view)"),
+        filters: z.unknown().optional().describe("Optional view filters payload"),
+        groupLevels: z.unknown().optional().describe("Optional grouping configuration"),
         description: z.string().optional(),
       },
     },
     withCamel(async (input) => {
-      const { stackId, tableId, name, type, copyMode, copyViewId, sequenceViewId, description } = input;
+      const { stackId, tableId, name, type, copyMode, copyViewId, sequenceViewId, filters, groupLevels, description } = input;
       const sId = stackId?.trim();
       const tId = tableId?.trim();
       const vName = name?.trim();
@@ -758,6 +761,8 @@ export function createStackbyMcpServer(): McpServer {
           copyMode: copyMode as "new" | "duplicate" | undefined,
           copyViewId: copyViewId?.trim(),
           sequenceViewId: sequenceViewId?.trim(),
+          filters,
+          groupLevels,
           description,
         });
         return {

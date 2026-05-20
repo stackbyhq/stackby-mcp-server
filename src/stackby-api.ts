@@ -447,9 +447,30 @@ function normalizeCreateStackResponse(body: unknown): {
   const message = typeof obj.message === "string" ? obj.message : undefined;
 
   if (obj.data !== undefined) {
-    const data = obj.data as CreateStackResult | CreateStackResult[];
+    const data = obj.data as
+      | CreateStackResult
+      | CreateStackResult[]
+      | { stack?: CreateStackResult | CreateStackResult[]; template?: CreateStackTemplateMeta };
+    if (data && typeof data === "object" && "stack" in data) {
+      const nested = data as { stack?: CreateStackResult | CreateStackResult[]; template?: CreateStackTemplateMeta };
+      return {
+        stack: Array.isArray(nested.stack) ? nested.stack[0] ?? {} : nested.stack ?? {},
+        template: nested.template ?? template,
+        error,
+        message,
+      };
+    }
     return {
       stack: Array.isArray(data) ? data[0] ?? {} : data ?? {},
+      template,
+      error,
+      message,
+    };
+  }
+
+  if (Array.isArray(obj.stack)) {
+    return {
+      stack: (obj.stack[0] as CreateStackResult) ?? {},
       template,
       error,
       message,
