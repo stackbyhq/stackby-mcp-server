@@ -42,6 +42,7 @@ import {
   mcpBlockAction,
 } from "./stackby-api.js";
 import { applyStackTemplate, type TemplateTableInput } from "./stack-template.js";
+import { getBlockAppSpec, normalizeBlockAppType } from "./block-app-specs.js";
 
 /** Zod schemas for optional AI-friendly stack templates on create_stack */
 const templateColumnSchema = z.object({
@@ -361,18 +362,149 @@ export function createStackbyMcpServer(): McpServer {
     };
   }
 
-  function normalizeBlockType(type: unknown): string {
-    const raw = typeof type === "string" ? type.trim() : "";
-    if (!raw) return "Chart";
-    return raw.charAt(0).toUpperCase() + raw.slice(1);
-  }
-
   function normalizeBlockActionBody(
     stackId: string,
     blockId: string,
     action: string,
     body: Record<string, unknown> = {}
   ): Record<string, unknown> {
+    function pickString(source: Record<string, unknown>, keys: string[]): string {
+      for (const key of keys) {
+        const value = source[key];
+        if (typeof value === "string" && value.trim()) return value.trim();
+      }
+      return "";
+    }
+
+    function normalizeSummaryType(raw: unknown): string {
+      const text = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+      const map: Record<string, string> = {
+        none: "None",
+        countfilled: "CountFilled",
+        "count filled": "CountFilled",
+        countempty: "CountEmpty",
+        "count empty": "CountEmpty",
+        countunique: "countUnique",
+        "count unique": "countUnique",
+        percentfilled: "percentFilled",
+        "percent filled": "percentFilled",
+        percentempty: "percentEmpty",
+        "percent empty": "percentEmpty",
+        percentunique: "percentUnique",
+        "percent unique": "percentUnique",
+        sum: "Sum",
+        avg: "Avg",
+        average: "Avg",
+        min: "Min",
+        max: "Max",
+      };
+      return map[text] ?? "";
+    }
+
+    function buildSummaryBlockFields(
+      source: Record<string, unknown>
+    ): Record<string, unknown> {
+      if (source.summaryData && typeof source.summaryData === "object") {
+        return { summaryData: source.summaryData };
+      }
+
+      const tableId = pickString(source, ["tableId", "table", "tableValue", "table_id"]);
+      const viewId = pickString(source, ["viewId", "view", "viewValue", "view_id"]);
+      const rawColumnValue =
+        source.columnValue && typeof source.columnValue === "object"
+          ? (source.columnValue as Record<string, unknown>)
+          : null;
+      const columnId =
+        pickString(source, ["columnId", "column", "column_id"]) ||
+        pickString(rawColumnValue ?? {}, ["key", "value", "columnId"]);
+      const columnTypeRaw =
+        pickString(source, ["columnType"]) ||
+        pickString(rawColumnValue ?? {}, ["type"]);
+      const isNumericColumn =
+        ["number", "currency", "count", "formula", "aggregation"].includes(
+          columnTypeRaw.toLowerCase()
+        );
+      const summaryType = normalizeSummaryType(
+        source.summaryType ?? source.summary_type ?? source.summaryTypeValue
+      );
+      const summaryTypeKeyByValue: Record<string, string> = {
+        None: "0",
+        CountFilled: "1",
+        CountEmpty: "2",
+        countUnique: "3",
+        percentFilled: "4",
+        percentEmpty: "5",
+        percentUnique: "6",
+        Sum: "7",
+        Avg: "8",
+        Min: "9",
+        Max: "10",
+      };
+      const modeRaw = pickString(source, ["mode", "summaryMode", "activeSummaryView"]);
+      const isSummaryMode =
+        modeRaw.toLowerCase() === "summary" || Boolean(summaryType) || Boolean(columnId);
+      const rawCount = source.count;
+      const count = typeof rawCount === "number" ? rawCount : undefined;
+      const summaryValue = source.summaryValue;
+      const symbol = pickString(source, ["symbol"]);
+      const countCloseButton =
+        typeof source.countCloseButton === "number" ? source.countCloseButton : undefined;
+
+      const summaryOption: Array<Record<string, string>> = [
+        { key: "0", text: "None", value: "None" },
+        { key: "1", text: "CountFilled", value: "CountFilled" },
+        { key: "2", text: "CountEmpty", value: "CountEmpty" },
+        { key: "3", text: "CountUnique", value: "countUnique" },
+        { key: "4", text: "PercentFilled", value: "percentFilled" },
+        { key: "5", text: "PercentEmpty", value: "percentEmpty" },
+        { key: "6", text: "PercentUnique", value: "percentUnique" },
+      ];
+      if (isNumericColumn) {
+        summaryOption.push(
+          { key: "7", text: "Sum", value: "Sum" },
+          { key: "8", text: "Avg", value: "Avg" },
+          { key: "9", text: "Min", value: "Min" },
+          { key: "10", text: "Max", value: "Max" }
+        );
+      }
+
+      const normalizedSummaryType =
+        !isNumericColumn && ["Sum", "Avg", "Min", "Max"].includes(summaryType)
+          ? ""
+          : summaryType;
+
+      const summaryData: Record<string, unknown> = {
+        tableValue: tableId ? { key: tableId, value: tableId, text: tableId } : {},
+        viewValue: viewId ? { key: viewId, value: viewId, text: viewId } : {},
+        columnValue: rawColumnValue
+          ? rawColumnValue
+          : columnId
+          ? { key: columnId, value: columnId, text: columnId }
+          : "0",
+        summaryTypeValue: normalizedSummaryType
+          ? {
+              key: summaryTypeKeyByValue[normalizedSummaryType] ?? "",
+              text: normalizedSummaryType,
+              value: normalizedSummaryType,
+            }
+          : "",
+        summaryOption,
+        colorCode: pickString(source, ["colorCode", "color", "color_code"]) || "#29293d",
+        label: pickString(source, ["label", "title"]),
+        selectSummary: isSummaryMode,
+        activeSummaryView: {
+          value: isSummaryMode ? "Summary" : "Count",
+          label: isSummaryMode ? "Summary" : "Count",
+        },
+      };
+      if (count !== undefined) summaryData.count = count;
+      if (summaryValue !== undefined) summaryData.summaryValue = summaryValue;
+      if (symbol) summaryData.symbol = symbol;
+      if (countCloseButton !== undefined) summaryData.countCloseButton = countCloseButton;
+
+      return { summaryData };
+    }
+
     const payload: Record<string, unknown> = {
       ...body,
       stackId: (body.stackId as string | undefined) ?? stackId,
@@ -386,8 +518,12 @@ export function createStackbyMcpServer(): McpServer {
     }
 
     const dashboardId = typeof payload.dashboardId === "string" ? payload.dashboardId.trim() : "";
-    const name = typeof payload.name === "string" && payload.name.trim() ? payload.name.trim() : "Chart";
-    const blockType = normalizeBlockType(payload.type);
+    const blockSpec = getBlockAppSpec(payload.type);
+    const name =
+      typeof payload.name === "string" && payload.name.trim()
+        ? payload.name.trim()
+        : blockSpec.defaultName;
+    const blockType = normalizeBlockAppType(payload.type);
     const layout =
       payload.layout && typeof payload.layout === "object"
         ? (payload.layout as Record<string, unknown>)
@@ -424,6 +560,13 @@ export function createStackbyMcpServer(): McpServer {
         continue;
       }
       blockFields[key] = value;
+    }
+    if (blockType === "Summary") {
+      const summarySource = { ...blockFields, ...config, ...payload };
+      const summaryFields = buildSummaryBlockFields(summarySource);
+      for (const [key, value] of Object.entries(summaryFields)) {
+        blockFields[key] = value;
+      }
     }
 
     return {
@@ -2366,6 +2509,25 @@ export function createStackbyMcpServer(): McpServer {
         };
       }
       try {
+        if (act === "create") {
+          const spec = getBlockAppSpec((actionBody as Record<string, unknown> | undefined)?.type);
+          const rawBody = (actionBody as Record<string, unknown> | undefined) ?? {};
+          const missing = spec.requiredCreateKeys.filter((key) => {
+            const value = rawBody[key];
+            return typeof value !== "string" || value.trim() === "";
+          });
+          if (missing.length > 0) {
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: `block_action create is missing required field(s) for "${spec.type}": ${missing.join(", ")}.`,
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
         const normalizedBody = normalizeBlockActionBody(
           sId,
           blockId,
