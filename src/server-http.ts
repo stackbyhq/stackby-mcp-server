@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Stackby MCP Server — HTTP entry point for hosted mode (e.g. ChatGPT, ALB).
  * Per-request auth via X-Stackby-API-Key or Authorization: Bearer <token>.
  * GET /health for ALB health checks; POST /mcp and GET /mcp for MCP.
@@ -7,10 +7,12 @@ import * as http from "node:http";
 import { createStackbyMcpServer } from "./mcp-server.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { runWithRequestContext } from "./request-context.js";
+import { handleDocsRequest } from "./docs-portal.js";
 
 const PORT = Number(process.env.PORT) || 3001;
 const MCP_PATH = "/mcp";
 const HEALTH_PATH = "/health";
+const DOCS_PATH = "/docs";
 const OAUTH_AUTHORIZE_PATH = "/oauth/authorize";
 const OAUTH_TOKEN_PATH = "/oauth/token";
 const OAUTH_WELL_KNOWN_PATH = "/.well-known/oauth-authorization-server";
@@ -85,6 +87,11 @@ async function main(): Promise<void> {
     if (path === HEALTH_PATH && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "text/plain" });
       res.end("OK");
+      return;
+    }
+    // Documentation portal -- GET /docs and GET /docs/*
+    if ((path === DOCS_PATH || path.startsWith("/docs/")) && req.method === "GET") {
+      await handleDocsRequest(req, res, url);
       return;
     }
 
@@ -225,6 +232,7 @@ async function main(): Promise<void> {
 
   server.listen(PORT, () => {
     console.log(`Stackby MCP HTTP server listening on port ${PORT}`);
+    console.log(`  GET  ${DOCS_PATH} -- documentation portal`);
     console.log(`  GET  ${HEALTH_PATH} — health check`);
     console.log(`  POST ${MCP_PATH} — MCP (send X-Stackby-API-Key or Authorization: Bearer <key>)`);
     console.log(`  GET  ${MCP_PATH} — MCP SSE`);
@@ -235,3 +243,4 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+
